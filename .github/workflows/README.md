@@ -1,19 +1,37 @@
 # GitHub Actions workflows
 
-Three manually-triggered workflows. Run them from the **Actions** tab → pick the
-workflow → **Run workflow**. Nothing runs on push.
+Run them from the **Actions** tab → pick the workflow → **Run workflow**. 
 
 | Workflow | Does | Run it when |
 |---|---|---|
 | **1 · Build data and statistics** | spreadsheet → schema.org JSON-LD → statistics, diagrams and site | the spreadsheet changed, or the pipeline did |
-| **2 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages | you want to see a build on a real URL |
-| **3 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the build is ready to go live |
+| **2 · Explain how the data was read** | writes and prints a plain-language account of how the spreadsheet was interpreted | before trusting a build, or before showing it to anyone |
+| **3 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages | you want to see a build on a real URL |
+| **4 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the build is ready to go live |
 
 Workflow 1 used to be two, one for the RDF graph and one for the statistics.
 They were merged because the statistics are measured from the published
 schema.org file, so they could never run without first producing it. Keeping them
 apart only created a way for the reports to describe a file that no longer
 existed.
+
+## Reading workflow 2 before you trust a build
+ 
+Everything upstream of the site involves inference: which delimiter separates the
+names in a cell, whether a credited party is a person or an institution. The
+guesses are right often enough that nobody notices the wrong ones unless pointed
+at them. Workflow 2 does the pointing, and prints the whole report to the run log
+so it can be read without downloading anything.
+ 
+It writes two files to `reports/`:
+ 
+- `interpretation.md` — which columns needed a judgement call, which are sparse,
+  which cells held the most values, and how confidently each credited party was
+  typed
+- `person_review.csv` — the underlying row-by-row reasoning
+`person_review.csv` **at the repository root is a different file**. That one
+carries the reviewer's `DECISION` column and is an input to the build. Workflow 2
+never writes it, so running the workflow cannot erase a decision.
 
 ## What workflow 1 does, in order
 
@@ -24,15 +42,10 @@ analyze_graph.py                    schema.org    -> statistics + model diagram
 document_schema_model.py            schema.org    -> full model diagram
 ```
 
-Each step reads the previous one's output, so the order is not a preference.
-The statistics come last on purpose: they describe what was actually published
-rather than what the pipeline intended.
+Each step reads the previous one's output. The statistics describe what was 
+actually published.
 
-Every run writes a summary to the Actions page with the dataset, nominator,
-nomination and discipline-group counts, a table of datasets per discipline
-group, and every class in the file with its instance count.
-
-## The identifier guard
+## Dataset Identifiers
 
 `site/data/impactful_datasets.data.jsonld` is the published data **and** the
 identifier registry. Workflow 1 seeds it into the build directory first, then
@@ -41,24 +54,6 @@ fails the job if any identifier was minted without `allow_new_ids` set.
 Without that seeding a run reports `133 new ids minted`, renumbers every dataset
 and breaks every published link. When you genuinely add datasets, re-run with
 `allow_new_ids` and check the count matches the number added.
-
-## Expected repository layout
-
-```
-.github/workflows/      these files
-restructure_impactful_datasets.py
-build_website.py
-analyze_graph.py
-document_schema_model.py
-review_person_types.py
-requirements.txt        pandas, rdflib, pillow
-person_review.csv       reviewed party classifications; DECISION overrides
-assets/                 AGU_Logo_H_CMYK.png, story-feature-source.jpg
-data/source/            the nomination spreadsheet
-impactful_datasets.jsonld    written by workflow 1
-site/                        written by workflow 1, published by 2 and 3
-reports/                     written by workflow 1
-```
 
 ## Inputs
 

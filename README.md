@@ -12,17 +12,17 @@ reproducible from the original CSV with no manual steps in between.
 ```
 Impactful_Datasets_v1_June_16_-_CSV_Format.csv        (source, 133 rows × 16 columns)
         │
-        │  1. restructure_impactful_datasets.py
+        │  1. scripts/restructure_impactful_datasets.py
         ▼
-impactful_datasets.jsonld        the RDF graph, 17,310 triples
+data/output/impactful_datasets.jsonld   the RDF graph, 17,439 triples
 column_report.md                 per-column multi-value analysis
 column_statistics.json           the same, machine-readable
         │
-        ├──── 2. analyze_graph.py ──────▶  graph_statistics.md
+        ├──── 2. scripts/analyze_graph.py ─────▶  graph_statistics.md
         │                                  graph_statistics.json
         │                                  conceptual_model.svg
         │
-        └──── 3. build_website.py ────▶  index.html
+        └──── 3. scripts/build_website.py ────▶  index.html
                                            assets/css/*  assets/js/*  assets/img/*
                                            data/impactful_datasets.data.jsonld
 ```
@@ -54,7 +54,7 @@ If the address ever changes again:
 grep -rl "data.agu.org/impactful-datasets" --include="*.py" --include="*.yml" .
 # edit those three, then rebuild so the data file follows
 mkdir -p build/data && cp site/data/impactful_datasets.data.jsonld build/data/
-python build_website.py impactful_datasets.jsonld \
+python scripts/build_website.py impactful_datasets.jsonld \
     --logo assets/AGU_Logo_H_CMYK.png \
     --feature-image assets/story-feature-source.jpg \
     --base-url "https://the-new-address/" -o build
@@ -132,23 +132,23 @@ mkdir -p build/data
 cp site/data/impactful_datasets.data.jsonld build/data/
 
 # no argument: uses the spreadsheet in data/source/
-python restructure_impactful_datasets.py -o build
+python scripts/restructure_impactful_datasets.py -o build
 
-python build_website.py build/impactful_datasets.jsonld \
+python scripts/build_website.py build/impactful_datasets.jsonld \
     --logo assets/AGU_Logo_H_CMYK.png \
     --feature-image assets/story-feature-source.jpg \
     --base-url "https://data.agu.org/impactful-datasets/" -o build
 
-python analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
-python document_schema_model.py build/data/impactful_datasets.data.jsonld \
+python scripts/analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
+python scripts/document_schema_model.py build/data/impactful_datasets.data.jsonld \
     -o build/schema_model.svg
 ```
 
 The spreadsheet can also come from elsewhere:
 
 ```bash
-python restructure_impactful_datasets.py path/to/export.csv -o build
-python restructure_impactful_datasets.py https://example.org/nominations.csv -o build
+python scripts/restructure_impactful_datasets.py path/to/export.csv -o build
+python scripts/restructure_impactful_datasets.py https://example.org/nominations.csv -o build
 ```
 
 With no argument it takes the single CSV in `data/source/`, found by glob rather
@@ -170,10 +170,10 @@ push.
 The whole data side in one pass.
 
 ```
-restructure_impactful_datasets.py   spreadsheet   → RDF working graph
-build_website.py                    working graph → schema.org JSON-LD + site
-analyze_graph.py                    schema.org    → statistics + model diagram
-document_schema_model.py            schema.org    → full model diagram
+scripts/restructure_impactful_datasets.py   spreadsheet   → RDF working graph
+scripts/build_website.py                    working graph → schema.org JSON-LD + site
+scripts/analyze_graph.py                    schema.org    → statistics + model diagram
+scripts/document_schema_model.py            schema.org    → full model diagram
 ```
 
 The order is fixed by what each step reads. The statistics come last on purpose:
@@ -197,14 +197,33 @@ It also refuses to finish if identifiers were reissued without `allow_new_ids`.
 That guard exists because a rebuild that renumbers datasets breaks every
 published URL, silently.
 
-### 2 · Preview on this repo's Pages
+### 2 · Explain how the data was read
+
+Writes `reports/interpretation.md` and `reports/person_review.csv`, and prints the
+whole report to the run log so it can be read without downloading anything.
+
+Run it between building and previewing. Everything upstream of the site involves
+inference — which delimiter separates the names in a cell, whether a credited
+party is a person or an institution — and the guesses are right often enough that
+nobody notices the wrong ones unless pointed at them.
+
+The report covers which columns needed a judgement call (the ones split on a
+comma, where `Jochum, Klaus Peter` is one person and `A. Newman, M. Clark` is
+two), which columns are sparse, which cells held the most values, and how
+confidently each of the 518 credited parties was typed.
+
+It never writes `person_review.csv` at the repository root. That file carries the
+reviewer's `DECISION` column and is an input to the build, so running this
+workflow cannot erase a decision.
+
+### 3 · Preview on this repo's Pages
 
 Publishes `site/` to *this* repository's Pages as a staging preview. Optional,
 and worth a thought before switching on: it puts a second public copy of the
 collection at a github.io address, while the data inside it says the canonical
 home is `data.agu.org`. Serving locally with `python -m http.server` avoids that.
 
-### 3 · Open a pull request on agu-data.github.io
+### 4 · Open a pull request on agu-data.github.io
 
 Proposes `site/` as the `impactful-datasets/` directory of
 `AGU-Data/agu-data.github.io`, from a fork, so nobody at AGU-Data has to install
@@ -220,10 +239,10 @@ Needs the secret `AGU_DATA_BOT_TOKEN`. See [SETUP.md](SETUP.md).
 Spreadsheet in, RDF out. It can come from four places:
 
 ```bash
-python restructure_impactful_datasets.py                    # the CSV in data/source/ — the default
-python restructure_impactful_datasets.py --zenodo           # the Zenodo record, latest version
-python restructure_impactful_datasets.py path/to/file.csv   # a path
-python restructure_impactful_datasets.py https://…/file.csv # any URL
+python scripts/restructure_impactful_datasets.py                    # the CSV in data/source/ — the default
+python scripts/restructure_impactful_datasets.py --zenodo           # the Zenodo record, latest version
+python scripts/restructure_impactful_datasets.py path/to/file.csv   # a path
+python scripts/restructure_impactful_datasets.py https://…/file.csv # any URL
 ```
 
 The committed CSV is the default, so an ordinary build uses a file that is in the
@@ -272,7 +291,7 @@ Outputs:
 
 | File | What it is |
 |---|---|
-| `impactful_datasets.jsonld` | the full graph — 133 datasets, 161 nominators, 17,310 triples across 23 classes |
+| `data/output/impactful_datasets.jsonld` | the full graph — 133 datasets, 161 nominators, 17,310 triples across 23 classes |
 | `column_report.md` | per-column analysis: fill rate, cardinality histograms, which delimiter was guessed and why, and where the guesses are weakest |
 | `column_statistics.json` | the same figures, for diffing against a future export |
 | `_clean.csv` | the encoding-repaired intermediate, kept so you can see what changed |
@@ -305,7 +324,7 @@ property-edge shapes in the data file and labels each connector with the propert
 that makes it:
 
 ```bash
-python document_schema_model.py site/data/impactful_datasets.data.jsonld \
+python scripts/document_schema_model.py site/data/impactful_datasets.data.jsonld \
     -o schema_model.svg
 ```
 

@@ -3,21 +3,6 @@ name: 3 · Open a pull request on agu-data.github.io
 # Publishes site/ into impactful-datasets/ on AGU-Data/agu-data.github.io by
 # opening a pull request from a fork.
 #
-# Why a fork rather than pushing a branch to their repository:
-#
-#   * It needs nothing from AGU-Data. No deploy key to install, no collaborator
-#     to add, no app to approve. Their repository is public, so a bot account
-#     can fork it and propose changes the same way any outside contributor
-#     would. Coordination that never has to happen cannot go stale.
-#
-#   * A deploy key cannot do this. Deploy keys are git transport only; opening a
-#     pull request is an API call and needs a token. That is the single fact
-#     that decides the shape of this workflow.
-#
-#   * The branch name is stable, so repeated runs force-push the same branch and
-#     the open pull request updates in place. Per-run branches would leave a
-#     trail of stale pull requests in someone else's repository.
-#
 # The change is confined to one directory and checked before anything is pushed:
 # if the diff touches a path outside `target_path`, the job fails. Nothing at
 # their repository root -- _config.yml, _posts, CNAME, the theme -- can be
@@ -25,7 +10,7 @@ name: 3 · Open a pull request on agu-data.github.io
 #
 # Build for the right address first, or the canonical URLs will be wrong:
 #
-#     python build_website.py impactful_datasets.jsonld \
+#     python scripts/build_website.py impactful_datasets.jsonld \
 #         --logo assets/AGU_Logo_H_CMYK.png \
 #         --feature-image assets/story-feature-source.jpg \
 #         --base-url "https://data.agu.org/impactful-datasets/" -o build

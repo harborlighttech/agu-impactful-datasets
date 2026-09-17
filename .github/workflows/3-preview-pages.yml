@@ -1,6 +1,6 @@
 name: 2 · Preview on this repo's Pages
 
-# Publishes site/ to THIS repository's GitHub Pages, as a staging preview.
+# Publishes site/ to this repository's GitHub Pages, as a staging preview.
 #
 # This is not how the site goes live. The public site is a directory inside
 # AGU-Data/agu-data.github.io, and workflow 3 proposes changes to it. Use this

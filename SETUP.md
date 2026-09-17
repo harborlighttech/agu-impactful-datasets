@@ -53,13 +53,13 @@ mkdir -p build/data
 cp site/data/impactful_datasets.data.jsonld build/data/
 
 # no argument: uses the single CSV in data/source/
-python restructure_impactful_datasets.py -o build
-python build_website.py build/impactful_datasets.jsonld \
+python scripts/restructure_impactful_datasets.py -o build
+python scripts/build_website.py build/impactful_datasets.jsonld \
     --logo assets/AGU_Logo_H_CMYK.png \
     --feature-image assets/story-feature-source.jpg \
     --base-url "https://data.agu.org/impactful-datasets/" -o build
-python analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
-python document_schema_model.py build/data/impactful_datasets.data.jsonld \
+python scripts/analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
+python scripts/document_schema_model.py build/data/impactful_datasets.data.jsonld \
     -o build/schema_model.svg
 ```
 

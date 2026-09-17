@@ -1,12 +1,7 @@
 name: 1 · Build data and statistics
 
-# One pass over the whole data side: the nomination spreadsheet in, the published
+# One pass over the whole data side: the nomination spreadsheet, the published
 # schema.org file and its statistics out.
-#
-# This replaces what used to be two workflows. Splitting them was a false economy:
-# the statistics are measured from the published file, so they could never be
-# produced without first producing it, and running them apart only created a way
-# for the reports to describe a file that no longer existed.
 #
 # The order is fixed by what each step reads:
 #
@@ -103,14 +98,14 @@ jobs:
       - name: 1 — Spreadsheet to RDF
         run: |
           case "${{ inputs.source }}" in
-            zenodo)      python restructure_impactful_datasets.py --zenodo -o build ;;
-            data/source) python restructure_impactful_datasets.py -o build ;;
-            custom)      python restructure_impactful_datasets.py "${{ inputs.source_ref }}" -o build ;;
+            zenodo)      python scripts/restructure_impactful_datasets.py --zenodo -o build ;;
+            data/source) python scripts/restructure_impactful_datasets.py -o build ;;
+            custom)      python scripts/restructure_impactful_datasets.py "${{ inputs.source_ref }}" -o build ;;
           esac
 
       - name: 2 — RDF to schema.org
         run: |
-          python build_website.py build/impactful_datasets.jsonld \
+          python scripts/build_website.py build/impactful_datasets.jsonld \
             --logo assets/AGU_Logo_H_CMYK.png \
             --feature-image assets/story-feature-source.jpg \
             --base-url "${{ inputs.base_url }}" \
@@ -130,8 +125,8 @@ jobs:
 
       - name: 3 — Statistics from the published file
         run: |
-          python analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
-          python document_schema_model.py build/data/impactful_datasets.data.jsonld \
+          python scripts/analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
+          python scripts/document_schema_model.py build/data/impactful_datasets.data.jsonld \
             -o build/schema_model.svg
 
       - name: Summarise
@@ -169,7 +164,8 @@ jobs:
         run: |
           mkdir -p reports
           rm -rf site && mkdir -p site
-          cp build/impactful_datasets.jsonld .
+          mkdir -p data/output
+          cp build/impactful_datasets.jsonld data/output/
           cp -r build/index.html build/assets build/data site/
           cp build/column_report.md build/column_statistics.json \
              build/graph_statistics.md build/graph_statistics.json \
@@ -180,7 +176,7 @@ jobs:
         with:
           name: data-and-statistics
           path: |
-            impactful_datasets.jsonld
+            data/output/impactful_datasets.jsonld
             site/
             reports/
 
@@ -188,7 +184,7 @@ jobs:
       # commit turned off still shows exactly what it would have changed.
       - name: List what changed
         run: |
-          git add impactful_datasets.jsonld site/ reports/
+          git add data/output/impactful_datasets.jsonld site/ reports/
           git diff --staged --name-status > /tmp/changed.txt || true
           if [ ! -s /tmp/changed.txt ]; then
             echo "CHANGED=0" >> $GITHUB_ENV
