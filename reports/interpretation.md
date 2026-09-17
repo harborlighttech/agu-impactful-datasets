@@ -43,11 +43,11 @@ One cell held this many separate values. Large numbers are usually correct and s
 
 | Type | High | Medium | Low |
 |---|---|---|---|
-| Person | 156 | 6 | 0 |
-| Organization | 0 | 0 | 0 |
-| agu:ResponsibleParty | 0 | 0 | 356 |
+| Person | 156 | 6 | 5 |
+| Organization | 42 | 0 | 0 |
+| agu:ResponsibleParty | 0 | 97 | 212 |
 
-**356 parties were typed on weak evidence.** These are the rows most worth a human glance; `reports/person_review.csv` has the reasoning for every one.
+**217 parties were typed on weak evidence.** These are the rows most worth a human glance; `reports/person_review.csv` has the reasoning for every one.
 
 ## Entries that no amount of typing will fix
 
