@@ -1,0 +1,253 @@
+name: 5 · Open a pull request on agu-data.github.io
+
+# Publishes site/ into impactful-datasets/ on AGU-Data/agu-data.github.io by
+# opening a pull request from a fork.
+#
+# Why a fork rather than pushing a branch to their repository:
+#
+#   * It needs nothing from AGU-Data. No deploy key to install, no collaborator
+#     to add, no app to approve. Their repository is public, so a bot account
+#     can fork it and propose changes the same way any outside contributor
+#     would. Coordination that never has to happen cannot go stale.
+#
+#   * A deploy key cannot do this. Deploy keys are git transport only; opening a
+#     pull request is an API call and needs a token. That is the single fact
+#     that decides the shape of this workflow.
+#
+#   * The branch name is stable, so repeated runs force-push the same branch and
+#     the open pull request updates in place. Per-run branches would leave a
+#     trail of stale pull requests in someone else's repository.
+#
+# The change is confined to one directory and checked before anything is pushed:
+# if the diff touches a path outside `target_path`, the job fails. Nothing at
+# their repository root -- _config.yml, _posts, CNAME, the theme -- can be
+# affected by a bug here.
+#
+# Build for the right address first, or the canonical URLs will be wrong:
+#
+#     python build_website.py impactful_datasets.jsonld \
+#         --logo assets/AGU_Logo_H_CMYK.png \
+#         --feature-image assets/story-feature-source.jpg \
+#         --base-url "https://data.agu.org/impactful-datasets/" -o build
+#
+# One-time setup is in the README, under "Proposing changes to data.agu.org".
+on:
+  workflow_dispatch:
+    inputs:
+      upstream:
+        description: "Repository to propose the change to"
+        required: true
+        default: "AGU-Data/agu-data.github.io"
+      fork:
+        description: "The bot account's fork, as owner/name"
+        required: true
+        default: "agu-impactful-datasets-bot/agu-data.github.io"
+      target_path:
+        description: "Directory to publish into (nothing outside is touched)"
+        required: true
+        default: "impactful-datasets"
+      base_branch:
+        description: "Branch to propose against"
+        required: true
+        default: "main"
+      work_branch:
+        description: "Branch on the fork; reused so the pull request updates in place"
+        required: true
+        default: "impactful-datasets"
+      dry_run:
+        description: "Assemble and show the diff without pushing or opening anything"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propose-data-agu
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.AGU_DATA_BOT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the site has been built
+        run: |
+          test -f site/index.html || { echo "::error::No site/index.html. Run '3 · Build site' first."; exit 1; }
+          test -f site/data/impactful_datasets.data.jsonld || { echo "::error::No data file in site/data/."; exit 1; }
+          echo "Proposing $(du -sh site | cut -f1) across $(find site -type f | wc -l) files"
+
+      # Every path in the built site is relative, so it works under any prefix.
+      # A root-relative path would break the moment the site is served from a
+      # subdirectory, and would do so silently.
+      - name: Check no path is rooted
+        run: |
+          if grep -rEo '(src|href)="/[^"]*"' site/index.html; then
+            echo "::error::Root-relative path in index.html; it would break under ${{ inputs.target_path }}/."
+            exit 1
+          fi
+          echo "All asset paths are relative."
+
+      - name: Check the token
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret AGU_DATA_BOT_TOKEN is not set. See the README."
+            exit 1
+          fi
+          WHO=$(gh api user --jq .login)
+          echo "Acting as $WHO"
+          gh repo view "${{ inputs.fork }}" --json name >/dev/null \
+            || { echo "::error::Cannot see the fork ${{ inputs.fork }}. Has the bot forked ${{ inputs.upstream }}?"; exit 1; }
+
+      # Whether a pull request is already open changes how the branch is built.
+      # Their repository requires a review, so once someone has looked at a pull
+      # request we add commits to it rather than rewriting its history: a
+      # force-push dismisses stale approvals and throws away the "changes since
+      # your last review" diff a reviewer depends on.
+      - name: Is a pull request already open?
+        if: ${{ !inputs.dry_run }}
+        run: |
+          N=$(gh pr list --repo "${{ inputs.upstream }}" --head "${{ inputs.work_branch }}" \
+                --state open --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$N" ]; then
+            echo "OPEN_PR=$N" >> $GITHUB_ENV
+            echo "Pull request #$N is open; commits will be added to it."
+          else
+            echo "No open pull request; the branch will be rebuilt from upstream."
+          fi
+
+      - name: Clone the fork and prepare the branch
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ] && [ -z "$GH_TOKEN" ]; then
+            git clone -q --depth 1 --branch "${{ inputs.base_branch }}" \
+              "https://github.com/${{ inputs.upstream }}.git" target
+            echo "Dry run without a token: cloned upstream read-only."
+          else
+            git clone -q "https://x-access-token:${GH_TOKEN}@github.com/${{ inputs.fork }}.git" target
+            cd target
+            git remote add upstream "https://github.com/${{ inputs.upstream }}.git"
+            git fetch -q upstream "${{ inputs.base_branch }}"
+            if [ -n "${OPEN_PR:-}" ] && git fetch -q origin "${{ inputs.work_branch }}"; then
+              git checkout -q -B "${{ inputs.work_branch }}" "origin/${{ inputs.work_branch }}"
+              echo "Continuing the branch behind pull request #${OPEN_PR}."
+            else
+              git checkout -q -B "${{ inputs.work_branch }}" "upstream/${{ inputs.base_branch }}"
+              echo "Branch rebuilt from upstream/${{ inputs.base_branch }}."
+            fi
+          fi
+          echo "Their repository currently holds:"
+          ls -1 target | grep -v '^\.git$' | sed 's/^/  /'
+
+      - name: Replace the directory
+        run: |
+          DEST="target/${{ inputs.target_path }}"
+          # Delete and recopy rather than overlay, so files removed from site/
+          # also disappear. Scoped to DEST alone.
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          cp -R site/. "$DEST"/
+          # The data file alone is 16,000 lines of generated JSON-LD. Nobody can
+          # review that line by line, and their branch protection asks somebody to
+          # try. Marking the directory as generated collapses it in the pull
+          # request diff, so a reviewer sees the shape of the change instead of a
+          # wall of machine output. A .gitattributes applies to its own directory
+          # and below, so this one affects nothing outside ours.
+          printf '%s\n' \
+            '* linguist-generated=true' \
+            '*.jsonld linguist-language=JSON' > "$DEST/.gitattributes"
+          echo "Wrote $(find "$DEST" -type f | wc -l) files to ${{ inputs.target_path }}/"
+
+      - name: Refuse to touch anything outside the directory
+        run: |
+          cd target
+          git add -A
+          OUTSIDE=$(git diff --staged --name-only | grep -v "^${{ inputs.target_path }}/" || true)
+          if [ -n "$OUTSIDE" ]; then
+            echo "::error::This run would change files outside ${{ inputs.target_path }}/:"
+            printf '%s\n' "$OUTSIDE" | sed 's/^/  /'
+            exit 1
+          fi
+          echo "Confirmed: every change is inside ${{ inputs.target_path }}/."
+          git diff --staged --name-status | sed 's/^/  /' | head -30
+          echo "  $(git diff --staged --name-only | wc -l) files changed in total"
+
+      - name: Push the branch
+        if: ${{ !inputs.dry_run }}
+        run: |
+          cd target
+          git config user.name  "AGU Impactful Datasets bot"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          if git diff --staged --quiet; then
+            echo "NOCHANGE=1" >> $GITHUB_ENV
+            echo "Already identical to ${{ inputs.base_branch }}; nothing to propose."
+            exit 0
+          fi
+          git commit -q -m "Update ${{ inputs.target_path }} from ${GITHUB_REPOSITORY}@${GITHUB_SHA:0:7}"
+          if [ -n "${OPEN_PR:-}" ]; then
+            # adding to a branch under review: never rewrite what a reviewer read
+            git push -q origin "${{ inputs.work_branch }}"
+            echo "Added a commit to the branch behind pull request #${OPEN_PR}."
+          else
+            git push -q --force origin "${{ inputs.work_branch }}"
+            echo "Pushed a fresh ${{ inputs.work_branch }} to ${{ inputs.fork }}."
+          fi
+
+      - name: Write the pull request description
+        if: ${{ !inputs.dry_run && env.NOCHANGE != '1' }}
+        run: |
+          # Written to a file rather than a heredoc: inside a YAML block the
+          # closing EOF is indented, and bash only accepts it at column zero.
+          {
+            printf 'Publishes the AGU Impactful Datasets collection to `/%s/`.\n\n' "${{ inputs.target_path }}"
+            printf 'Generated from [`%s`](https://github.com/%s) at `%s`.\n\n' \
+              "$GITHUB_REPOSITORY" "$GITHUB_REPOSITORY" "${GITHUB_SHA:0:7}"
+            printf '**Scope.** Every change is inside `%s/`. Nothing at the repository root is touched, and the workflow fails rather than pushing if that ever stops being true.\n\n' "${{ inputs.target_path }}"
+            printf '**Jekyll.** These are static files with no front matter, so Jekyll copies them verbatim. No `.nojekyll` is added, since at the root of a Jekyll site that would disable the build for every page.\n\n'
+            printf '**Paths.** Every asset reference is relative, so the page works from a subdirectory. It expects the trailing slash: `https://data.agu.org/%s/`.\n\n' "${{ inputs.target_path }}"
+            printf 'The page fetches `data/impactful_datasets.data.jsonld` over HTTP at load, so that file ships alongside it in the same directory.\n\n'
+            printf -- '---\n\n**What is worth checking.** These files are generated, and `.gitattributes` marks them so GitHub collapses them here. Rather than reading the diff:\n\n'
+            printf -- '- every changed path is inside `%s/` — the workflow fails rather than pushing if not\n' "${{ inputs.target_path }}"
+            printf -- '- %s files changed, none of them outside that directory\n' \
+              "$(git -C target diff --staged --name-only | wc -l | tr -d ' ')"
+            printf -- '- the rendered page: check out this branch and open `%s/index.html` through a local server, or preview after merge\n' "${{ inputs.target_path }}"
+          } > /tmp/pr-body.md
+          cat /tmp/pr-body.md
+
+      - name: Open or update the pull request
+        if: ${{ !inputs.dry_run && env.NOCHANGE != '1' }}
+        run: |
+          FORK_OWNER="${{ inputs.fork }}"; FORK_OWNER="${FORK_OWNER%%/*}"
+          EXISTING=$(gh pr list --repo "${{ inputs.upstream }}" \
+                       --head "${{ inputs.work_branch }}" --state open \
+                       --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            # the force-push has already updated the branch this pull request tracks
+            gh pr edit "$EXISTING" --repo "${{ inputs.upstream }}" --body-file /tmp/pr-body.md
+            URL="https://github.com/${{ inputs.upstream }}/pull/$EXISTING"
+            echo "Updated existing pull request #$EXISTING"
+          else
+            URL=$(gh pr create --repo "${{ inputs.upstream }}" \
+              --base "${{ inputs.base_branch }}" \
+              --head "${FORK_OWNER}:${{ inputs.work_branch }}" \
+              --title "Add the Impactful Datasets collection at /${{ inputs.target_path }}/" \
+              --body-file /tmp/pr-body.md)
+            echo "Opened $URL"
+          fi
+          echo "PR_URL=$URL" >> $GITHUB_ENV
+
+      - name: Summarise
+        run: |
+          {
+            echo "## ${{ inputs.dry_run && 'Dry run — nothing pushed' || 'Proposed' }}"
+            echo ""
+            echo "- upstream: \`${{ inputs.upstream }}\` (\`${{ inputs.base_branch }}\`)"
+            echo "- directory: \`${{ inputs.target_path }}/\`"
+            echo "- files: $(find site -type f | wc -l)"
+            echo "- source commit: \`${GITHUB_SHA:0:7}\`"
+            [ -n "${PR_URL:-}" ] && echo "- pull request: $PR_URL"
+            [ "${NOCHANGE:-}" = "1" ] && echo "- no change: the published directory already matches"
+          } >> $GITHUB_STEP_SUMMARY

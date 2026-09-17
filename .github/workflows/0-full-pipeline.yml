@@ -1,0 +1,122 @@
+name: 0 · Full pipeline
+
+# Runs all three steps in order, in one job, so the intermediate files pass
+# straight between them. Use this after a new spreadsheet export; use the
+# individual workflows when only one stage needs re-running.
+on:
+  workflow_dispatch:
+    inputs:
+      source_csv:
+        description: "Path to the nomination CSV"
+        required: true
+        default: "data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv"
+      base_url:
+        description: "Site URL used for canonical page addresses"
+        required: true
+        default: "https://data.agu.org/impactful-datasets/"
+      allow_new_ids:
+        description: "Permit new identifiers (expected when datasets are added)"
+        type: boolean
+        default: false
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pandas rdflib pillow
+
+      - name: Check the source file exists
+        run: |
+          test -f "${{ inputs.source_csv }}" || { echo "::error::No CSV at ${{ inputs.source_csv }}"; exit 1; }
+
+      - name: 1 — CSV to RDF graph
+        run: python restructure_impactful_datasets.py "${{ inputs.source_csv }}" -o build
+
+      - name: 2 — Graph statistics
+        run: python analyze_graph.py build/impactful_datasets.jsonld -o build
+
+      - name: Seed the identifier registry
+        run: |
+          mkdir -p build/data
+          if [ -f site/data/impactful_datasets.data.jsonld ]; then
+            cp site/data/impactful_datasets.data.jsonld build/data/
+          else
+            echo "::warning::No existing data file; identifiers will be minted fresh."
+          fi
+
+      - name: 3 — Build site
+        run: |
+          python build_website.py build/impactful_datasets.jsonld \
+            --logo assets/AGU_Logo_H_CMYK.png \
+            --feature-image assets/story-feature-source.jpg \
+            --base-url "${{ inputs.base_url }}" \
+            -o build | tee build.log
+
+      - name: Guard against renumbered identifiers
+        run: |
+          MINTED=$(grep -o '[0-9]\+ new id' build.log | head -1 | grep -o '[0-9]\+')
+          MINTED=${MINTED:-0}
+          echo "identifiers minted this run: $MINTED"
+          if [ "$MINTED" -gt 0 ] && [ "${{ inputs.allow_new_ids }}" != "true" ]; then
+            echo "::error::$MINTED identifiers were minted; existing URLs would break. Re-run with allow_new_ids if datasets were genuinely added."
+            exit 1
+          fi
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import json, os, collections
+          s = json.load(open("build/graph_statistics.json"))
+          c = s["counts"]
+          g = json.load(open("build/data/impactful_datasets.data.jsonld"))["@graph"]
+          k = collections.Counter(n.get("@type") for n in g)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Pipeline complete\n\n")
+              fh.write(f"- triples in graph: **{s['triples']:,}**\n")
+              fh.write(f"- datasets: **{c['datasets']}**\n")
+              fh.write(f"- distinct nominators: **{c['nominators_distinct']}**\n")
+              fh.write(f"- published dataset nodes: **{k['Dataset']}**\n")
+          PY
+
+      - name: Publish outputs
+        run: |
+          mkdir -p reports
+          rm -rf site && mkdir -p site
+          cp build/impactful_datasets.jsonld .
+          cp -r build/index.html build/assets build/data site/
+          cp build/column_report.md build/column_statistics.json \
+             build/graph_statistics.md build/graph_statistics.json \
+             build/conceptual_model.svg build/party_report.csv reports/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-output
+          path: |
+            impactful_datasets.jsonld
+            site/
+            reports/
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add impactful_datasets.jsonld site/ reports/
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Full pipeline rebuild from ${{ inputs.source_csv }}"
+          git push

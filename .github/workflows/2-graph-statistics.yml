@@ -1,0 +1,101 @@
+name: 2 · Graph statistics
+
+# Step 2 of the pipeline, and optional: it only produces reporting, and step 3
+# does not depend on it. Answers questions about the graph with SPARQL, so the
+# figures and the diagram labels cannot drift from the data.
+on:
+  workflow_dispatch:
+    inputs:
+      graph:
+        description: "Path to the RDF graph"
+        required: true
+        default: "impactful_datasets.jsonld"
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install rdflib
+
+      - name: Check the graph exists
+        run: |
+          if [ ! -f "${{ inputs.graph }}" ]; then
+            echo "::error::No graph at ${{ inputs.graph }}. Run '1 · Rebuild RDF graph' first."
+            exit 1
+          fi
+
+      # The conceptual model is drawn from the published data file when one
+      # exists, because that is the model consumers read. Seed it so the diagram
+      # documents the published schema.org shape rather than the intermediate.
+      - name: Analyse
+        run: |
+          mkdir -p build/data
+          if [ -f site/data/impactful_datasets.data.jsonld ]; then
+            cp site/data/impactful_datasets.data.jsonld build/data/
+          fi
+          python analyze_graph.py "${{ inputs.graph }}" -o build
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import json, os
+          s = json.load(open("build/graph_statistics.json"))
+          c = s["counts"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Graph statistics\n\n")
+              fh.write(f"- triples: **{s['triples']:,}**\n")
+              fh.write(f"- datasets: **{c['datasets']}**\n")
+              fh.write(f"- distinct nominators: **{c['nominators_distinct']}**\n")
+              fh.write(f"- nominator links: **{c['nominator_links']}**\n")
+              fh.write(f"- repositories: **{c['repositories']}**\n")
+              fh.write(f"- classes: **{len(s['classes'])}**\n\n")
+              multi = s["datasets_with_multiple_nominators"]
+              fh.write(f"### Datasets with more than one nominator ({len(multi)})\n\n")
+              fh.write("| Nominators | Dataset |\n|---|---|\n")
+              for m in multi:
+                  fh.write(f"| {m['nominators']} | {m['title']} |\n")
+          PY
+
+      # A second, fuller diagram: every class and property in the published
+      # schema.org graph, counted from the file itself.
+      - name: Document the published schema.org model
+        if: hashFiles('site/data/impactful_datasets.data.jsonld') != ''
+        run: |
+          python document_schema_model.py site/data/impactful_datasets.data.jsonld \
+            -o build/schema_model.svg
+
+      - name: Publish outputs
+        run: |
+          mkdir -p reports
+          cp build/graph_statistics.md build/graph_statistics.json build/conceptual_model.svg reports/
+          [ -f build/schema_model.svg ] && cp build/schema_model.svg reports/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graph-statistics
+          path: reports/
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Refresh graph statistics"
+          git push

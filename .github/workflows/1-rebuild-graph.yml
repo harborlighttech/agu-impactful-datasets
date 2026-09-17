@@ -1,0 +1,86 @@
+name: 1 · Rebuild RDF graph
+
+# Step 1 of the pipeline. Reads the nomination spreadsheet and writes the RDF
+# graph plus the column-quality report. Run this when the source CSV changes.
+on:
+  workflow_dispatch:
+    inputs:
+      source_csv:
+        description: "Path to the nomination CSV"
+        required: true
+        default: "data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv"
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  restructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pandas rdflib
+
+      - name: Check the source file exists
+        run: |
+          if [ ! -f "${{ inputs.source_csv }}" ]; then
+            echo "::error::No CSV at ${{ inputs.source_csv }}"
+            exit 1
+          fi
+          echo "Source: $(wc -l < "${{ inputs.source_csv }}") lines"
+
+      - name: Rebuild the graph
+        run: |
+          python restructure_impactful_datasets.py "${{ inputs.source_csv }}" -o build
+
+      # The source is not valid UTF-8 -- 16 bytes are Mac Roman -- and the script
+      # repairs them. Surface the count so a change in the source encoding is
+      # visible in the run log rather than silently absorbed.
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import json, os
+          s = json.load(open("build/column_statistics.json"))
+          g = json.load(open("build/impactful_datasets.jsonld"))
+          n = len(g["@graph"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## RDF graph rebuilt\n\n")
+              fh.write(f"- rows read: **{s['rows']}**\n")
+              fh.write(f"- columns: **{s['columns']}**\n")
+              fh.write(f"- encoding repairs applied: **{s['encoding_repairs']}**\n")
+              fh.write(f"- graph nodes: **{n}**\n")
+          PY
+
+      - name: Publish outputs
+        run: |
+          mkdir -p reports
+          cp build/impactful_datasets.jsonld .
+          cp build/column_report.md build/column_statistics.json reports/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rdf-graph
+          path: |
+            impactful_datasets.jsonld
+            reports/column_report.md
+            reports/column_statistics.json
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add impactful_datasets.jsonld reports/
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Rebuild RDF graph from ${{ inputs.source_csv }}"
+          git push

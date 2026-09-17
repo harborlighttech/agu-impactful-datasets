@@ -1,0 +1,33 @@
+# Build scratch. Everything the pipeline produces is written here first, then
+# copied into site/ and reports/ by the workflows.
+build/
+out/
+_clean.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# macOS. A pattern with no slash matches by basename at any depth, so this one
+# line covers ./.DS_Store, site/assets/.DS_Store and anything nested deeper.
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~

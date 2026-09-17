@@ -1,0 +1,139 @@
+name: 3 · Build site
+
+# Step 3 of the pipeline. Writes the published schema.org data file and the
+# static site.
+#
+# The important detail: data/impactful_datasets.data.jsonld is the identifier
+# registry. The build reads the ids already in it and reuses them, so every
+# dataset URL survives a rebuild. The committed copy is therefore seeded into the
+# build directory BEFORE the build runs, and the job fails if any new id is
+# minted unexpectedly. Without that seeding, a run would renumber all 133
+# datasets and break every published permalink.
+on:
+  workflow_dispatch:
+    inputs:
+      graph:
+        description: "Path to the RDF graph"
+        required: true
+        default: "impactful_datasets.jsonld"
+      data_url:
+        description: "URL the page fetches its data from (blank = relative path)"
+        required: false
+        default: ""
+      base_url:
+        description: "Site URL used for canonical page addresses"
+        required: true
+        default: "https://data.agu.org/impactful-datasets/"
+      featured:
+        description: "Dataset shown if someone lands on the detail page cold"
+        required: true
+        default: "Argo"
+      allow_new_ids:
+        description: "Permit new identifiers (only for genuinely new datasets)"
+        type: boolean
+        default: false
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pillow
+
+      - name: Check inputs
+        run: |
+          test -f "${{ inputs.graph }}" || { echo "::error::No graph at ${{ inputs.graph }}. Run step 1 first."; exit 1; }
+          test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
+          test -f person_review.csv || echo "::warning::No person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
+
+      # Seed the registry. This is what keeps identifiers stable.
+      - name: Seed the identifier registry
+        run: |
+          mkdir -p build/data
+          if [ -f site/data/impactful_datasets.data.jsonld ]; then
+            cp site/data/impactful_datasets.data.jsonld build/data/
+            echo "Seeded $(python -c "import json;print(len([n for n in json.load(open('build/data/impactful_datasets.data.jsonld'))['@graph'] if n.get('@type')=='Dataset']))") existing identifiers"
+          else
+            echo "::warning::No existing data file. Every identifier will be minted fresh — correct only on a first run."
+          fi
+
+      - name: Build
+        run: |
+          python build_website.py "${{ inputs.graph }}" \
+            --logo assets/AGU_Logo_H_CMYK.png \
+            --feature-image assets/story-feature-source.jpg \
+            --featured "${{ inputs.featured }}" \
+            --base-url "${{ inputs.base_url }}" \
+            ${{ inputs.data_url && format('--data-url "{0}"', inputs.data_url) || '' }} \
+            -o build | tee build.log
+
+      # A rebuild that reissues identifiers has broken every published URL. Catch
+      # it here rather than after deployment.
+      - name: Guard against renumbered identifiers
+        run: |
+          MINTED=$(grep -o '[0-9]\+ new id' build.log | head -1 | grep -o '[0-9]\+')
+          MINTED=${MINTED:-0}
+          echo "identifiers minted this run: $MINTED"
+          if [ "$MINTED" -gt 0 ] && [ "${{ inputs.allow_new_ids }}" != "true" ]; then
+            echo "::error::$MINTED identifiers were minted. If these are genuinely new datasets, re-run with allow_new_ids enabled. If not, the registry was not seeded and every existing URL would break."
+            exit 1
+          fi
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import csv, json, os, collections
+          g = json.load(open("build/data/impactful_datasets.data.jsonld"))["@graph"]
+          kinds = collections.Counter(n.get("@type") for n in g)
+          parties = collections.Counter(
+              (r["assigned_type"], r["confidence"])
+              for r in csv.DictReader(open("build/party_report.csv", encoding="utf-8-sig")))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Site built\n\n")
+              fh.write(f"- datasets: **{kinds['Dataset']}**\n")
+              fh.write(f"- endorsement lists: **{kinds['ItemList']}**\n\n")
+              fh.write("### Credited parties\n\n| Type | high | medium | low |\n|---|---|---|---|\n")
+              for t in ("Person", "Organization", "agu:ResponsibleParty"):
+                  fh.write(f"| {t} | {parties[(t,'high')]} | {parties[(t,'medium')]} | {parties[(t,'low')]} |\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: build/
+
+      - name: Publish outputs
+        run: |
+          rm -rf site
+          mkdir -p site reports
+          cp -r build/index.html build/assets build/data site/
+          cp build/party_report.csv reports/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: party-report
+          path: reports/party_report.csv
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/ reports/party_report.csv
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Rebuild site and published data"
+          git push

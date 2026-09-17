@@ -1,0 +1,58 @@
+name: 4 · Preview on this repo's Pages
+
+# Publishes site/ to THIS repository's GitHub Pages, as a staging preview.
+#
+# This is not how the site goes live. The public site is a directory inside
+# AGU-Data/agu-data.github.io, and workflow 5 proposes changes to it. Use this
+# one to look at a build on a real URL -- and to hand reviewers a link -- before
+# opening a pull request against somebody else's repository.
+#
+# One-time setup: Settings → Pages → Source → "GitHub Actions".
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the site has been built
+        run: |
+          test -f site/index.html || { echo "::error::No site/index.html. Run '3 · Build site' first."; exit 1; }
+          test -f site/data/impactful_datasets.data.jsonld || { echo "::error::No data file in site/data/."; exit 1; }
+          echo "Publishing $(du -sh site | cut -f1)"
+
+      # The page fetches its data over HTTP from data/, so the whole folder ships
+      # together. Jekyll would ignore nothing here, but it is off anyway: these
+      # are plain static files and need no processing.
+      - name: Disable Jekyll processing
+        run: touch site/.nojekyll
+
+      - uses: actions/configure-pages@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Summarise
+        run: |
+          echo "## Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- data file: ${{ steps.deployment.outputs.page_url }}data/impactful_datasets.data.jsonld" >> $GITHUB_STEP_SUMMARY
