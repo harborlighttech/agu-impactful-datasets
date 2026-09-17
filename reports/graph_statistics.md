@@ -1,7 +1,7 @@
 # Statistics
 
 Measured from `impactful_datasets.data.jsonld`, the schema.org file the site serves and other
-systems harvest. 9,616 triples.
+systems harvest. 9,617 triples.
 
 | | |
 |---|---|
@@ -39,10 +39,10 @@ Every type asserted in the file, and how many nodes carry it.
 |---|---|---|
 | `schema:CreativeWork` | schema | 759 |
 | `schema:PropertyValue` | schema | 478 |
-| `agu:ResponsibleParty` | agu | 308 |
-| `schema:Organization` | schema | 188 |
+| `agu:ResponsibleParty` | agu | 355 |
 | `schema:EndorseAction` | schema | 174 |
-| `schema:Person` | schema | 168 |
+| `schema:Person` | schema | 163 |
+| `schema:Organization` | schema | 146 |
 | `schema:Dataset` | schema | 133 |
 | `schema:ItemList` | schema | 133 |
 | `schema:DataCatalog` | schema | 111 |
