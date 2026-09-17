@@ -1,6 +1,6 @@
 # Column report — AGU *Impactful Datasets* v1
 
-**Source:** `Impactful_Datasets_v1_June_16_-_CSV_Format.csv` · 133 data rows × 16 columns
+**Source:** `Impactful Datasets v1_June 16 - CSV Format.csv — Zenodo 10.5281/zenodo.20722710` · 133 data rows × 16 columns
 **Output:** `impactful_datasets.jsonld` — 17,439 RDF triples across 846 nodes
 
 ---
