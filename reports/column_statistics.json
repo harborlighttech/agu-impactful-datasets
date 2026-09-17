@@ -1,4 +1,14 @@
 {
+  "source": {
+    "source": "zenodo",
+    "record_id": 20722710,
+    "version_doi": "10.5281/zenodo.20722710",
+    "concept_doi": "10.5281/zenodo.20722709",
+    "published": "2026-06-16T21:45:07.649770+00:00",
+    "file": "Impactful Datasets v1_June 16 - CSV Format.csv",
+    "checksum": "md5:ed687767217c6699934c0d5dade530eb",
+    "bytes": 900780
+  },
   "encoding_repairs": 16,
   "rows": 133,
   "columns": 16,
