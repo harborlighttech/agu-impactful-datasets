@@ -54,8 +54,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # requirements.txt is what makes `cache: pip` above work: setup-python
+      # builds its cache key from a dependency file, and fails the step if there
+      # is none to hash.
       - name: Install dependencies
-        run: pip install pandas rdflib pillow
+        run: pip install -r requirements.txt
 
       # The source can be a path, a URL, or nothing at all. The script resolves
       # it and reports what it used, so the run log always records which

@@ -46,7 +46,7 @@ Worth doing once before relying on Actions, because a local failure is far
 easier to read than a failed job.
 
 ```bash
-pip install pandas rdflib pillow
+pip install -r requirements.txt
 
 # the registry has to be in place before the build runs
 mkdir -p build/data

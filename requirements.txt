@@ -1,0 +1,14 @@
+# Dependencies for the pipeline. Four scripts, three libraries.
+#
+#   pandas   reading the nomination spreadsheet
+#   rdflib   parsing and querying the RDF and schema.org graphs
+#   pillow   downscaling the logo and the callout photo at build time
+#
+# Floors rather than exact pins. The scripts use long-settled APIs, so pinning
+# to a patch release would mean chasing updates for no benefit, while a floor
+# still rules out versions old enough to lack what is used here. If a future
+# release does break something, pin it then and say why.
+
+pandas>=2.0
+rdflib>=7.0
+pillow>=10.0

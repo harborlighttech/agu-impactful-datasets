@@ -51,6 +51,7 @@ build_website.py
 analyze_graph.py
 document_schema_model.py
 review_person_types.py
+requirements.txt        pandas, rdflib, pillow
 person_review.csv       reviewed party classifications; DECISION overrides
 assets/                 AGU_Logo_H_CMYK.png, story-feature-source.jpg
 data/source/            the nomination spreadsheet

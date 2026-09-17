@@ -125,7 +125,7 @@ secret named `AGU_DATA_BOT_TOKEN`.
 Locally, the same steps the workflow runs:
 
 ```bash
-pip install pandas rdflib pillow
+pip install -r requirements.txt
 
 # the registry must be in place before the build, or identifiers are reissued
 mkdir -p build/data
