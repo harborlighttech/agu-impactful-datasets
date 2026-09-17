@@ -57,7 +57,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.AGU_DATA_BOT_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check the site has been built
         run: |
