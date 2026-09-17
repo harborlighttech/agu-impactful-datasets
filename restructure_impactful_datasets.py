@@ -38,31 +38,126 @@ from pathlib import Path
 
 import pandas as pd
 
+# Always resolves to the newest version of the nominations record.
+ZENODO_CONCEPT_DOI_DEFAULT = "10.5281/zenodo.20722709"
+
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("csv", nargs="?", default=None,
                 help="the nomination spreadsheet: a path, or an http(s) URL to "
                      "fetch. Omit it to use the single CSV in data/source/.")
+ap.add_argument("--zenodo", nargs="?", const=ZENODO_CONCEPT_DOI_DEFAULT, default=None,
+                metavar="DOI",
+                help="build from the Zenodo record instead. With no value, uses "
+                     "the collection's concept DOI, which always resolves to the "
+                     "most recent version of the record.")
+ap.add_argument("--zenodo-file", default=None, metavar="NAME",
+                help="which file in the record to use, if it holds several CSVs")
 ap.add_argument("-o", "--outdir", type=Path, default=Path("out"),
                 help="output directory (default: ./out)")
 args = ap.parse_args()
 
 
-def resolve_source(given):
+# The nominations live in a Zenodo record. Its concept DOI always resolves to the
+# most recent version, so new nominations become a new version of the record and
+# this DOI keeps pointing at the current data without anything here changing.
+ZENODO_CONCEPT_DOI = ZENODO_CONCEPT_DOI_DEFAULT
+ZENODO_API = "https://zenodo.org/api/records/%s"
+RE_ZENODO = re.compile(
+    r"(?:^|zenodo\.org/(?:records?|record)/|10\.5281/zenodo\.)(\d{4,})", re.I)
+
+
+def _fetch(url, timeout=60):
+    """Zenodo rejects the default urllib user agent, so identify ourselves."""
+    import urllib.request
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "agu-impactful-datasets/1.0 (+https://data.agu.org)",
+                      "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as fh:
+        return fh.read()
+
+
+def from_zenodo(ref, want=None):
+    """The spreadsheet from a Zenodo record, resolved to its latest version.
+
+    `ref` may be a concept DOI, a version DOI, a record URL or a bare record id.
+    Requesting the concept record follows through to the newest version, which
+    is the point: the DOI stays the same while the data behind it moves.
+
+    Returns the bytes and what was actually used, so a build can record which
+    version of the record it came from rather than just "Zenodo".
+    """
+    import json as _json
+    m = RE_ZENODO.search(str(ref))
+    if not m:
+        raise SystemExit("could not find a Zenodo record id in %r" % ref)
+    # Requesting a concept record redirects to its newest version, and
+    # requesting a version record returns that version. So this does not chase
+    # links.latest: doing so would silently upgrade a deliberately pinned
+    # version DOI to the current one, which is the opposite of what pinning is
+    # for. The concept DOI gives the latest because that is what it means.
+    rec = _json.loads(_fetch(ZENODO_API % m.group(1)))
+
+    files = rec.get("files") or []
+    csvs = [f for f in files if str(f.get("key", "")).lower().endswith(".csv")]
+    if want:
+        csvs = [f for f in files if f.get("key") == want] or csvs
+    if not csvs:
+        raise SystemExit(
+            "no CSV in Zenodo record %s. It holds: %s"
+            % (rec.get("id"), ", ".join(f.get("key", "?") for f in files) or "nothing"))
+    if len(csvs) > 1 and not want:
+        raise SystemExit(
+            "several CSVs in Zenodo record %s:\n  %s\nPass --zenodo-file to choose."
+            % (rec.get("id"), "\n  ".join(f["key"] for f in csvs)))
+    chosen = csvs[0]
+    data = _fetch(chosen["links"]["self"])
+
+    # Zenodo publishes a checksum for every file; a truncated download is a
+    # silent corruption otherwise, and this costs nothing to check.
+    want_sum = str(chosen.get("checksum") or "")
+    if want_sum.startswith("md5:"):
+        import hashlib
+        got = hashlib.md5(data).hexdigest()
+        if got != want_sum[4:]:
+            raise SystemExit("checksum mismatch on %s: Zenodo says %s, got %s"
+                             % (chosen["key"], want_sum[4:], got))
+
+    meta = {"source": "zenodo",
+            "record_id": rec.get("id"),
+            "version_doi": rec.get("doi"),
+            "concept_doi": rec.get("conceptdoi"),
+            "published": rec.get("created") or (rec.get("metadata") or {}).get("publication_date"),
+            "file": chosen.get("key"),
+            "checksum": want_sum,
+            "bytes": len(data)}
+    print("source: Zenodo record %s — %s" % (rec.get("id"), chosen.get("key")))
+    print("  version DOI: %s" % (rec.get("doi") or "unknown"))
+    if rec.get("conceptdoi"):
+        print("  concept DOI: %s (always the latest version)" % rec["conceptdoi"])
+    print("  %d bytes%s" % (len(data), ", checksum verified" if want_sum else ""))
+    return "%s (%s)" % (chosen.get("key"), rec.get("doi") or "Zenodo"), data, meta
+
+
+def resolve_source(given, zenodo=None, zenodo_file=None):
     """Where to read the spreadsheet from, and the bytes it holds.
 
-    A path or a URL both work. With neither, the single CSV in data/source/ is
-    used, found by glob rather than by name: the exported filename carries a
-    date and changes with every new export, so hard-coding it would break the
-    default the first time the sheet is re-exported.
+    In order of preference: an explicit --zenodo reference, then whatever was
+    passed positionally (a Zenodo DOI or record URL, any other URL, or a path),
+    then the single CSV in data/source/. That default is found by glob rather
+    than by name, because the exported filename carries a date and changes with
+    every new export.
     """
+    if zenodo:
+        return from_zenodo(zenodo, zenodo_file)
+
+    if given and RE_ZENODO.search(str(given)) and re.search(r"zenodo", str(given), re.I):
+        return from_zenodo(given, zenodo_file)
+
     if given and re.match(r"https?://", str(given), re.I):
-        import urllib.request
-        req = urllib.request.Request(str(given), headers={"User-Agent": "impactful-datasets"})
-        with urllib.request.urlopen(req, timeout=60) as fh:
-            data = fh.read()
+        data = _fetch(str(given))
         print("source: %s (%d bytes fetched)" % (given, len(data)))
-        return str(given), data
+        return str(given), data, {"source": "url", "url": str(given), "bytes": len(data)}
 
     if given:
         path = Path(given)
@@ -72,7 +167,8 @@ def resolve_source(given):
         found = sorted(Path("data/source").glob("*.csv"))
         if not found:
             raise SystemExit(
-                "no CSV in data/source/ and none given. Pass a path or a URL.")
+                "no CSV in data/source/ and none given. Pass a path, a URL, or "
+                "--zenodo to build from the Zenodo record.")
         if len(found) > 1:
             raise SystemExit(
                 "several CSVs in data/source/, so the default is ambiguous:\n  "
@@ -80,15 +176,24 @@ def resolve_source(given):
                 + "\nPass the one to use.")
         path = found[0]
     print("source: %s" % path)
-    return str(path), path.read_bytes()
+    return str(path), path.read_bytes(), {"source": "file", "path": str(path)}
 
 
-SRC_NAME, SRC_BYTES = resolve_source(args.csv)
+SRC_NAME, SRC_BYTES, SRC_META = resolve_source(
+    args.csv, args.zenodo, args.zenodo_file)
 SRC = SRC_NAME
-# What to call the source in the report. A path shows its filename; a URL shows
-# the whole thing, since its last segment alone rarely identifies anything.
-SRC_LABEL = (SRC_NAME if re.match(r"https?://", SRC_NAME, re.I)
-             else Path(SRC_NAME).name)
+# What to call the source in the report. A Zenodo build names the file and the
+# exact version DOI it came from, which is the whole point of building from a
+# versioned record. A URL shows in full; a path shows its filename. Path().name
+# is only safe for paths -- on "file.csv (10.5281/zenodo.123)" it would cut at
+# the last dot and leave nonsense.
+if SRC_META.get("source") == "zenodo":
+    SRC_LABEL = "%s — Zenodo %s" % (SRC_META.get("file"),
+                                    SRC_META.get("version_doi") or SRC_META.get("record_id"))
+elif re.match(r"https?://", SRC_NAME, re.I):
+    SRC_LABEL = SRC_NAME
+else:
+    SRC_LABEL = Path(SRC_NAME).name
 OUTDIR = args.outdir
 OUTDIR.mkdir(parents=True, exist_ok=True)
 CLEAN = OUTDIR / "_clean.csv"
@@ -545,7 +650,8 @@ for i, c in enumerate(SHORT):
     st["dist"] = dict(sorted(collections.Counter(counts).items()))
     stats.append(st)
 
-STATS_DOC = {"encoding_repairs": enc_fixes, "rows": len(df), "columns": len(SHORT),
+STATS_DOC = {"source": SRC_META,
+             "encoding_repairs": enc_fixes, "rows": len(df), "columns": len(SHORT),
              "column_stats": stats}
 json.dump(STATS_DOC, open(OUTDIR / "column_statistics.json", "w"), indent=2, ensure_ascii=False)
 
