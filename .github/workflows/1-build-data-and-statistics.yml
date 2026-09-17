@@ -71,7 +71,7 @@ jobs:
       - name: Check the inputs
         run: |
           test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
-          test -f person_review.csv || echo "::warning::No person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
+          test -f data/source/person_review.csv || echo "::warning::No data/source/person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
           case "${{ inputs.source }}" in
             zenodo)      echo "Building from the Zenodo record's concept DOI (latest version)" ;;
             data/source) echo "Building from the spreadsheet committed in data/source/" ;;
