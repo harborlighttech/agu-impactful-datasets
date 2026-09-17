@@ -61,8 +61,7 @@
       "@id": "agu:impactDimension"
     },
     "sequence": {
-      "@id": "agu:nominatorSequence",
-      "@type": "xsd:integer"
+      "@id": "agu:nominatorSequence"
     },
     "affiliation": {
       "@id": "schema:affiliation",
