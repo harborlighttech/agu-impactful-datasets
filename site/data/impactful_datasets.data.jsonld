@@ -605,8 +605,8 @@
       "url": "https://tccondata.org/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:total-carbon-column-observing-network-tccon-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:total-carbon-column-observing-network-tccon-team",
           "name": "Total Carbon Column Observing Network (TCCON) Team"
         }
       ],
@@ -724,8 +724,8 @@
           "name": "Andrey K. Savtchenko (andrey.k.savtchenko@nasa.gov)"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:zhong-liu-zhong-liu-1-nasa-gov",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:zhong-liu-zhong-liu-1-nasa-gov",
           "name": "Zhong Liu (zhong.liu-1@nasa.gov)"
         },
         {
@@ -815,8 +815,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:wdc-silso-royal-observatory-of-belgium",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:wdc-silso-royal-observatory-of-belgium",
           "name": "WDC-SILSO - Royal Observatory of Belgium"
         }
       ],
@@ -1007,8 +1007,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:fetterer-f-meier-w-n-windnagel-a-k-stafford-t",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:fetterer-f-meier-w-n-windnagel-a-k-stafford-t",
           "name": "Fetterer, F., Meier, W. N., Windnagel, A. K. & Stafford, T."
         }
       ],
@@ -1090,15 +1090,15 @@
           "name": "Albrecht Hofmann"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:digis-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:digis-team",
           "name": "DIGIS team"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:digital-geochemical-infrastructure-digis-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:digital-geochemical-infrastructure-digis-team",
           "name": "Digital Geochemical Infrastructure (DIGIS) team"
         }
       ],
@@ -1215,8 +1215,8 @@
       ],
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:noaa-oar-aoml",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:noaa-oar-aoml",
           "name": "NOAA-OAR-AOML"
         }
       ],
@@ -1781,8 +1781,8 @@
       "url": "https://woudc.org/en/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:many-site-pis-from-more-than-500-sites",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:many-site-pis-from-more-than-500-sites",
           "name": "Many site PIs (from more than 500 sites"
         },
         {
@@ -1978,8 +1978,8 @@
       "url": "https://doi.org/10.3334/ORNLDAAC/2448",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:virkkala-wargowsky-vogt-kuhn-et-al-over-250-coauthors",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:virkkala-wargowsky-vogt-kuhn-et-al-over-250-coauthors",
           "name": "Virkkala, Wargowsky, Vogt & Kuhn et al. (+ over 250 coauthors)"
         }
       ],
@@ -2088,15 +2088,15 @@
       "url": "https://fire.airnow.gov/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:us-epa-usfs-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:us-epa-usfs-team",
           "name": "US EPA/USFS team"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:us-epa-usfs-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:us-epa-usfs-team",
           "name": "US EPA/USFS team"
         }
       ],
@@ -2133,15 +2133,15 @@
       "url": "https://www-air.larc.nasa.gov/missions/asia-aq/index.html",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:asia-aq-science-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:asia-aq-science-team",
           "name": "ASIA-AQ Science Team"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:nasa-asdc",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:nasa-asdc",
           "name": "NASA ASDC"
         }
       ],
@@ -2398,8 +2398,8 @@
       "url": "https://airs.jpl.nasa.gov/data/get-data/standard-data/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:airs-science-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:airs-science-team",
           "name": "AIRS Science Team"
         }
       ],
@@ -2598,8 +2598,8 @@
       ],
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:noaa-swfsc",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:noaa-swfsc",
           "name": "NOAA SWFSC"
         }
       ],
@@ -2664,8 +2664,8 @@
           "name": "Lynn DeWitt"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:noaa-erd",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:noaa-erd",
           "name": "NOAA ERD"
         },
         {
@@ -3338,13 +3338,13 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:repository-data-managers-xiaoduo-pan-panxd-itpcas-ac-cn",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:repository-data-managers-xiaoduo-pan-panxd-itpcas-ac-cn",
           "name": "Repository data managers Xiaoduo Pan (panxd@itpcas.ac.cn)"
         },
         {
-          "@type": "Person",
-          "@id": "urn:org:agu:data:impactful-datasets:id:person:curator-xin-li-xinli-itpcas-ac-cn",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:curator-xin-li-xinli-itpcas-ac-cn",
           "name": "Curator: Xin Li (xinli@itpcas.ac.cn)"
         }
       ],
@@ -3909,8 +3909,8 @@
       "url": "https://fdsn.org/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:the-international-federation-of-digital-seismograph-networks-fdsn",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:the-international-federation-of-digital-seismograph-networks-fdsn",
           "name": "The International Federation of Digital Seismograph Networks (FDSN)"
         }
       ],
@@ -3953,20 +3953,20 @@
       "url": "https://fluxnet.org/data/fluxnet2015-dataset/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:the-fluxnet-community",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:the-fluxnet-community",
           "name": "The FLUXNET Community"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:pastorello-et-al-https-www-nature-com-articles-s41597-020-0534-3",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:pastorello-et-al-https-www-nature-com-articles-s41597-020-0534-3",
           "name": "Pastorello et al. https://www.nature.com/articles/s41597-020-0534-3"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:fluxnet-coordination-project-ameriflux-management-project-icos",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:fluxnet-coordination-project-ameriflux-management-project-icos",
           "name": "FLUXNET Coordination Project / AmeriFlux Management Project / ICOS"
         }
       ],
@@ -4177,8 +4177,8 @@
       "url": "https://www.earthdata.nasa.gov/data/catalog/lpcloud-gedi02-b-002",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:dubayah-et-al-2022",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:dubayah-et-al-2022",
           "name": "Dubayah et al. (2022)"
         }
       ],
@@ -4269,8 +4269,8 @@
       "description": "Aotearoa New Zealand is one of the most geologically active countries in the world, and since 2001 GeoNet has been New Zealand’s national land and geohazards monitoring system delivering free and open data and information for geohazard monitoring and research across earthquakes, tsunami, landslides, volcanoes and deformation.\n\nGeoNet operates a multiparametric network of monitoring stations and a data collection, processing and dissemination infrastructure. The GeoNet programme is a conduit for science advice related to geohazard monitoring. “GeoNet data” encompasses a diverse data repository that include raw, processed and highly derived data products, that span from the New Zealand National Earthquake Catalogue and associated raw waveform data, to highly derived science products (e.g. Volcano Alert Levels).\n\nGeoNet datasets overlap in their utility and are truly multi-disciplinary and this range of hazard monitoring data and information are available through the website www.geonet.org.nz, a diverse array of access mechanisms and the GeoNet mobile phone application.\n\nA list of datasets (see https://www.geonet.org.nz/policy for a more comprehensive list and related DOIs) considered under the GeoNet umbrella are:\n- 4 GNSS related datasets\n- 8 seismic related datasets\n- 2 landslide specific datasets\n- 8 volcano specific datasets\n- 2 tsunami specific datasets\n- 2 site and instrument metadata datasets\n\nGeoNet is hosted and led by Earth Sciences New Zealand, and sponsored by the New Zealand Government through its agencies: Natural Hazards Commission Toka Tū Ake (NHC), GNS Science Te Pū Ao, Toitū Te Whenua Land Information New Zealand (LINZ), the National Emergency Management Agency (NEMA) and the Ministry of Business, Innovation and Employment (MBIE).",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:new-zealand-institute-for-earth-sciences-esnz",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:new-zealand-institute-for-earth-sciences-esnz",
           "name": "New Zealand Institute for Earth Sciences (ESNZ)"
         }
       ],
@@ -4947,8 +4947,8 @@
       "url": "https://nucleus.iaea.org/wiser",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:iaea-many",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:iaea-many",
           "name": "IAEA - many"
         }
       ],
@@ -4985,15 +4985,15 @@
       "url": "https://glodap.info",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:glodap-reference-group-https-glodap-info-index-php-group",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:glodap-reference-group-https-glodap-info-index-php-group",
           "name": "GLODAP reference group (https://glodap.info/index.php/group/)"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:glodap-reference-group",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:glodap-reference-group",
           "name": "GLODAP reference group"
         }
       ],
@@ -5108,8 +5108,8 @@
       "url": "https://data.cosmic.ucar.edu/gnss-ro/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:ucar",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:ucar",
           "name": "UCAR"
         }
       ],
@@ -5749,15 +5749,15 @@
       "url": "https://doi.org/10.5067/GNSS/GNSS_HIGHRATE_D_001",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:international-gnss-service-igs",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:international-gnss-service-igs",
           "name": "International GNSS Service (IGS)"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:international-gnss-service-igs",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:international-gnss-service-igs",
           "name": "International GNSS Service (IGS)"
         }
       ],
@@ -6005,23 +6005,23 @@
           "name": "Zhen LI"
         },
         {
-          "@type": "Person",
-          "@id": "urn:org:agu:data:impactful-datasets:id:person:zhongwei-yan",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:zhongwei-yan",
           "name": "Zhongwei YAN"
         },
         {
-          "@type": "Person",
-          "@id": "urn:org:agu:data:impactful-datasets:id:person:yani-zhu",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:yani-zhu",
           "name": "Yani ZHU"
         },
         {
-          "@type": "Person",
-          "@id": "urn:org:agu:data:impactful-datasets:id:person:nicolas-freychet",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:nicolas-freychet",
           "name": "Nicolas FREYCHET"
         },
         {
-          "@type": "Person",
-          "@id": "urn:org:agu:data:impactful-datasets:id:person:simon-tett",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:simon-tett",
           "name": "Simon TETT"
         }
       ],
@@ -6096,8 +6096,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:noaa-national-centers-for-environmental-information",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:noaa-national-centers-for-environmental-information",
           "name": "NOAA National Centers for Environmental Information"
         }
       ],
@@ -6350,13 +6350,13 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:incois-data-management-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:incois-data-management-team",
           "name": "INCOIS Data Management Team"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:ncei-data-management-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:ncei-data-management-team",
           "name": "NCEI Data Management Team"
         }
       ],
@@ -6604,8 +6604,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:igs-central-bureau-igs-operational-products-coordination-components",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:igs-central-bureau-igs-operational-products-coordination-components",
           "name": "IGS Central Bureau, IGS Operational products coordination components"
         }
       ],
@@ -7137,8 +7137,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:national-energy-technology-laboratory-netl",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:national-energy-technology-laboratory-netl",
           "name": "National Energy Technology Laboratory (NETL)"
         }
       ],
@@ -7605,8 +7605,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:oco-2-3-science-team",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:oco-2-3-science-team",
           "name": "OCO-2/3 Science Team"
         }
       ],
@@ -7653,8 +7653,8 @@
       ],
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:oco-2-and-3-operations-science-teams",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:oco-2-and-3-operations-science-teams",
           "name": "OCO-2 and -3 operations & science teams"
         }
       ],
@@ -8270,15 +8270,15 @@
       "url": "https://pds.lroc.im-ldi.com/data/",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:the-lroc-science-operations-center-soc",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:the-lroc-science-operations-center-soc",
           "name": "The LROC Science Operations Center (SOC)"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:nasa-planetary-data-system-imaging-node",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:nasa-planetary-data-system-imaging-node",
           "name": "NASA Planetary Data System Imaging Node"
         }
       ],
@@ -8685,15 +8685,15 @@
           "name": "Micah Wilhelm"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:the-pages-sisal-working-group-members",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:the-pages-sisal-working-group-members",
           "name": "the PAGES SISAL Working Group members"
         }
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:pages-sisal-working-group",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:pages-sisal-working-group",
           "name": "PAGES SISAL Working Group"
         }
       ],
@@ -9527,8 +9527,8 @@
       "url": "https://doi.org/10.7914/SN/TA",
       "creator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:iris-data-management-center",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:iris-data-management-center",
           "name": "IRIS Data Management Center"
         }
       ],
@@ -9895,8 +9895,8 @@
       ],
       "agu:curator": [
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:part-of-esa-worldcereal-consortium",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:part-of-esa-worldcereal-consortium",
           "name": "Part of ESA WorldCereal consortium"
         },
         {
@@ -9905,13 +9905,13 @@
           "name": "i.e. Wageningen Environmental Research (WENR)"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:international-institute-for-applied-systems-analysis-iiasa",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:international-institute-for-applied-systems-analysis-iiasa",
           "name": "International Institute for Applied Systems Analysis (IIASA)"
         },
         {
-          "@type": "Organization",
-          "@id": "urn:org:agu:data:impactful-datasets:id:organization:flemish-institute-for-technological-research-vito",
+          "@type": "agu:ResponsibleParty",
+          "@id": "urn:org:agu:data:impactful-datasets:id:party:flemish-institute-for-technological-research-vito",
           "name": "Flemish Institute for Technological Research (VITO)"
         }
       ],
