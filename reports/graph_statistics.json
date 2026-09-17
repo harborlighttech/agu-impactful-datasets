@@ -1,246 +1,113 @@
 {
-  "triples": 17439,
-  "counts": {
-    "datasets": 133,
-    "nominations": 133,
-    "nominators_distinct": 161,
-    "nominator_links": 174,
-    "nominators_orcid": 155,
-    "repositories": 117,
-    "organizations": 159,
-    "themes": 8,
-    "justifications": 161,
-    "impact_dimensions": 51,
-    "source_rows": 133
-  },
+  "source": "impactful_datasets.data.jsonld",
+  "triples": 9616,
+  "datasets": 133,
+  "nominators": 161,
+  "nominations": 174,
+  "discipline_groups": 9,
+  "disciplines": [
+    {
+      "group": "Ocean Science, Hydrology, Cryosphere",
+      "datasets": 31
+    },
+    {
+      "group": "Atmospheric Science, Space Weather",
+      "datasets": 30
+    },
+    {
+      "group": "Global Environmental Change, Paleoceanography and Paleoclimatology, Biogeoscience",
+      "datasets": 30
+    },
+    {
+      "group": "Earth’s Interior, Geodesy",
+      "datasets": 12
+    },
+    {
+      "group": "Earth Surface, Natural Hazards, Geology, Near Surface Geophysics",
+      "datasets": 10
+    },
+    {
+      "group": "Geohealth, Society, Education",
+      "datasets": 10
+    },
+    {
+      "group": "Space and Planetary Science",
+      "datasets": 9
+    },
+    {
+      "group": "Earth & Planetary Materials",
+      "datasets": 2
+    },
+    {
+      "group": "Nonlinear Geophysics, Machine Learning, Informatics",
+      "datasets": 0
+    }
+  ],
   "classes": [
     {
-      "class": "agu:ReuseExample",
-      "uri": "urn:org:agu:data:ns:ReuseExample",
-      "instances": 397
+      "class": "schema:CreativeWork",
+      "namespace": "schema",
+      "instances": 759
     },
     {
       "class": "schema:PropertyValue",
-      "uri": "https://schema.org/PropertyValue",
-      "instances": 370
+      "namespace": "schema",
+      "instances": 478
     },
     {
-      "class": "agu:CreatorStatement",
-      "uri": "urn:org:agu:data:ns:CreatorStatement",
-      "instances": 262
-    },
-    {
-      "class": "dct:BibliographicResource",
-      "uri": "http://purl.org/dc/terms/BibliographicResource",
-      "instances": 201
-    },
-    {
-      "class": "schema:CreativeWork",
-      "uri": "https://schema.org/CreativeWork",
-      "instances": 201
-    },
-    {
-      "class": "agu:Statement",
-      "uri": "urn:org:agu:data:ns:Statement",
-      "instances": 167
-    },
-    {
-      "class": "foaf:Person",
-      "uri": "http://xmlns.com/foaf/0.1/Person",
-      "instances": 161
-    },
-    {
-      "class": "schema:Person",
-      "uri": "https://schema.org/Person",
-      "instances": 161
-    },
-    {
-      "class": "agu:JustificationStatement",
-      "uri": "urn:org:agu:data:ns:JustificationStatement",
-      "instances": 161
-    },
-    {
-      "class": "foaf:Organization",
-      "uri": "http://xmlns.com/foaf/0.1/Organization",
-      "instances": 159
+      "class": "agu:ResponsibleParty",
+      "namespace": "agu",
+      "instances": 308
     },
     {
       "class": "schema:Organization",
-      "uri": "https://schema.org/Organization",
-      "instances": 159
+      "namespace": "schema",
+      "instances": 188
     },
     {
-      "class": "dcat:Dataset",
-      "uri": "http://www.w3.org/ns/dcat#Dataset",
-      "instances": 133
+      "class": "schema:EndorseAction",
+      "namespace": "schema",
+      "instances": 174
     },
     {
-      "class": "prov:Entity",
-      "uri": "http://www.w3.org/ns/prov#Entity",
-      "instances": 133
+      "class": "schema:Person",
+      "namespace": "schema",
+      "instances": 168
     },
     {
       "class": "schema:Dataset",
-      "uri": "https://schema.org/Dataset",
+      "namespace": "schema",
       "instances": 133
     },
     {
-      "class": "agu:Nomination",
-      "uri": "urn:org:agu:data:ns:Nomination",
+      "class": "schema:ItemList",
+      "namespace": "schema",
       "instances": 133
-    },
-    {
-      "class": "agu:SourceRow",
-      "uri": "urn:org:agu:data:ns:SourceRow",
-      "instances": 133
-    },
-    {
-      "class": "agu:CuratorStatement",
-      "uri": "urn:org:agu:data:ns:CuratorStatement",
-      "instances": 126
-    },
-    {
-      "class": "dcat:Catalog",
-      "uri": "http://www.w3.org/ns/dcat#Catalog",
-      "instances": 118
     },
     {
       "class": "schema:DataCatalog",
-      "uri": "https://schema.org/DataCatalog",
-      "instances": 117
+      "namespace": "schema",
+      "instances": 111
     },
     {
-      "class": "agu:ImpactDimension",
-      "uri": "urn:org:agu:data:ns:ImpactDimension",
-      "instances": 51
+      "class": "schema:DefinedTerm",
+      "namespace": "schema",
+      "instances": 60
     },
     {
-      "class": "skos:Concept",
-      "uri": "http://www.w3.org/2004/02/skos/core#Concept",
-      "instances": 8
+      "class": "rdf:Property",
+      "namespace": "rdf",
+      "instances": 2
     },
     {
-      "class": "skos:ConceptScheme",
-      "uri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
+      "class": "owl:Class",
+      "namespace": "owl",
       "instances": 1
     },
     {
-      "class": "prov:Collection",
-      "uri": "http://www.w3.org/ns/prov#Collection",
+      "class": "schema:DefinedTermSet",
+      "namespace": "schema",
       "instances": 1
-    }
-  ],
-  "nominators_per_nomination": {
-    "1": 118,
-    "2": 4,
-    "3": 5,
-    "4": 2,
-    "5": 2,
-    "6": 1,
-    "9": 1
-  },
-  "datasets_with_multiple_nominators": [
-    {
-      "title": "2020 TCCON Data Release",
-      "nominators": 9
-    },
-    {
-      "title": "Integrated Multi-satellitE Retrievals for the Global Precipitation Measurement (GPM) mission (IMERG)",
-      "nominators": 6
-    },
-    {
-      "title": "International Sunspot Number",
-      "nominators": 5
-    },
-    {
-      "title": "The National Geologic Map Database (NGMDB)",
-      "nominators": 5
-    },
-    {
-      "title": "Sea Ice Index",
-      "nominators": 4
-    },
-    {
-      "title": "The GEOROC database",
-      "nominators": 4
-    },
-    {
-      "title": "ARTMIP Database",
-      "nominators": 3
-    },
-    {
-      "title": "Argo",
-      "nominators": 3
-    },
-    {
-      "title": "California Climate Projections",
-      "nominators": 3
-    },
-    {
-      "title": "ECOSTRESS Tiled Land Surface Temperature and Emissivity Instantaneous L2 Global 70 m V002",
-      "nominators": 3
-    },
-    {
-      "title": "Fluxnet (or Ameriflux for N America)",
-      "nominators": 3
-    },
-    {
-      "title": "A global open-source dataset of monthly irrigated and rainfed cropped areas (MIRCA-OS) for the 21st century",
-      "nominators": 2
-    },
-    {
-      "title": "OMNI",
-      "nominators": 2
-    },
-    {
-      "title": "Ozone data collection at WOUDC",
-      "nominators": 2
-    },
-    {
-      "title": "PetDB",
-      "nominators": 2
-    }
-  ],
-  "people_nominating_multiple_datasets": [
-    {
-      "name": "Josh Laughner",
-      "datasets": 4
-    },
-    {
-      "name": "Peiyu Cao",
-      "datasets": 3
-    },
-    {
-      "name": "Angus Nixon",
-      "datasets": 2
-    },
-    {
-      "name": "Bethany Ehlmann",
-      "datasets": 2
-    },
-    {
-      "name": "Debra Wunch",
-      "datasets": 2
-    },
-    {
-      "name": "Erin Satterthwaite",
-      "datasets": 2
-    },
-    {
-      "name": "James T Morris",
-      "datasets": 2
-    },
-    {
-      "name": "Marthe Klöcking",
-      "datasets": 2
-    },
-    {
-      "name": "Paola Mazzoglio",
-      "datasets": 2
-    },
-    {
-      "name": "Zhong Liu",
-      "datasets": 2
     }
   ]
 }

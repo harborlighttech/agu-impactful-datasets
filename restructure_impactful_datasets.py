@@ -40,18 +40,57 @@ import pandas as pd
 
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("csv", type=Path, help="path to the nomination CSV")
+ap.add_argument("csv", nargs="?", default=None,
+                help="the nomination spreadsheet: a path, or an http(s) URL to "
+                     "fetch. Omit it to use the single CSV in data/source/.")
 ap.add_argument("-o", "--outdir", type=Path, default=Path("out"),
                 help="output directory (default: ./out)")
 args = ap.parse_args()
 
-SRC = args.csv
+
+def resolve_source(given):
+    """Where to read the spreadsheet from, and the bytes it holds.
+
+    A path or a URL both work. With neither, the single CSV in data/source/ is
+    used, found by glob rather than by name: the exported filename carries a
+    date and changes with every new export, so hard-coding it would break the
+    default the first time the sheet is re-exported.
+    """
+    if given and re.match(r"https?://", str(given), re.I):
+        import urllib.request
+        req = urllib.request.Request(str(given), headers={"User-Agent": "impactful-datasets"})
+        with urllib.request.urlopen(req, timeout=60) as fh:
+            data = fh.read()
+        print("source: %s (%d bytes fetched)" % (given, len(data)))
+        return str(given), data
+
+    if given:
+        path = Path(given)
+        if not path.exists():
+            raise SystemExit("no spreadsheet at %s" % path)
+    else:
+        found = sorted(Path("data/source").glob("*.csv"))
+        if not found:
+            raise SystemExit(
+                "no CSV in data/source/ and none given. Pass a path or a URL.")
+        if len(found) > 1:
+            raise SystemExit(
+                "several CSVs in data/source/, so the default is ambiguous:\n  "
+                + "\n  ".join(str(f) for f in found)
+                + "\nPass the one to use.")
+        path = found[0]
+    print("source: %s" % path)
+    return str(path), path.read_bytes()
+
+
+SRC_NAME, SRC_BYTES = resolve_source(args.csv)
+SRC = SRC_NAME
 OUTDIR = args.outdir
 OUTDIR.mkdir(parents=True, exist_ok=True)
 CLEAN = OUTDIR / "_clean.csv"
 
 # ---------- 0. encoding repair -------------------------------------------------
-raw = open(SRC, "rb").read()
+raw = SRC_BYTES
 txt = raw.decode("utf-8", errors="surrogateescape")
 MACROMAN_FIX = {"\udcd0": "\u2013", "\udc9a": "\u00f6"}
 enc_fixes = sum(txt.count(k) for k in MACROMAN_FIX)

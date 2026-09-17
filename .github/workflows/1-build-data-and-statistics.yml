@@ -20,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       source_csv:
-        description: "Path to the nomination spreadsheet"
-        required: true
-        default: "data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv"
+        description: "Spreadsheet to build from: a path, an http(s) URL, or blank for the copy in data/source/"
+        required: false
+        default: ""
       base_url:
         description: "Address the site is served from"
         required: true
@@ -57,12 +57,18 @@ jobs:
       - name: Install dependencies
         run: pip install pandas rdflib pillow
 
+      # The source can be a path, a URL, or nothing at all. The script resolves
+      # it and reports what it used, so the run log always records which
+      # spreadsheet the published data came from.
       - name: Check the inputs
         run: |
-          test -f "${{ inputs.source_csv }}" || { echo "::error::No spreadsheet at ${{ inputs.source_csv }}"; exit 1; }
           test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
           test -f person_review.csv || echo "::warning::No person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
-          echo "Source: $(wc -l < "${{ inputs.source_csv }}") lines"
+          if [ -z "${{ inputs.source_csv }}" ]; then
+            echo "Building from the spreadsheet in data/source/"
+          else
+            echo "Building from ${{ inputs.source_csv }}"
+          fi
 
       # The published data file is also the identifier registry. Seeding it is
       # what keeps every dataset URL stable across rebuilds.
@@ -77,7 +83,8 @@ jobs:
           fi
 
       - name: 1 — Spreadsheet to RDF
-        run: python restructure_impactful_datasets.py "${{ inputs.source_csv }}" -o build
+        run: |
+          python restructure_impactful_datasets.py ${{ inputs.source_csv && format('"{0}"', inputs.source_csv) || '' }} -o build
 
       - name: 2 — RDF to schema.org
         run: |
@@ -154,5 +161,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add impactful_datasets.jsonld site/ reports/
           git diff --staged --quiet && echo "nothing changed" && exit 0
-          git commit -m "Rebuild data and statistics from ${{ inputs.source_csv }}"
+          git commit -m "Rebuild data and statistics${{ inputs.source_csv && format(' from {0}', inputs.source_csv) || '' }}"
           git push

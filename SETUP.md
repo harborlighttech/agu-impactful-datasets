@@ -52,8 +52,8 @@ pip install pandas rdflib pillow
 mkdir -p build/data
 cp site/data/impactful_datasets.data.jsonld build/data/
 
-python restructure_impactful_datasets.py \
-    data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv -o build
+# no argument: uses the single CSV in data/source/
+python restructure_impactful_datasets.py -o build
 python build_website.py build/impactful_datasets.jsonld \
     --logo assets/AGU_Logo_H_CMYK.png \
     --feature-image assets/story-feature-source.jpg \
@@ -156,7 +156,9 @@ to guess:
 Nominations arrive through the same form into the same spreadsheet. Nothing
 about that has to change.
 
-1. Export the sheet and replace the file in `data/source/`.
+1. Export the sheet and replace the file in `data/source/`. The filename can
+   change; the default finds whichever CSV is there. A URL works too, if the
+   export is published somewhere fetchable.
 2. Run **1 · Build data and statistics**. Existing datasets keep their identifiers; new ones
    are minted fresh.
 3. If the run reports new identifiers and you did not add datasets, stop. Re-run
