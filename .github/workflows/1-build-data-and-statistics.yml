@@ -19,8 +19,17 @@ name: 1 · Build data and statistics
 on:
   workflow_dispatch:
     inputs:
-      source_csv:
-        description: "Spreadsheet to build from: a path, an http(s) URL, or blank for the copy in data/source/"
+      source:
+        description: "Where to build from"
+        type: choice
+        required: true
+        default: "data/source"
+        options:
+          - data/source     # the CSV committed in this repository
+          - zenodo          # the record's concept DOI, always its latest version
+          - custom          # whatever is put in source_ref below
+      source_ref:
+        description: "Used only when source is 'custom': a path, an http(s) URL, or a Zenodo DOI"
         required: false
         default: ""
       base_url:
@@ -60,18 +69,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # The source can be a path, a URL, or nothing at all. The script resolves
-      # it and reports what it used, so the run log always records which
-      # spreadsheet the published data came from.
+      # The committed CSV is the default, so a run builds from something already
+      # reviewed and in the repository rather than from whatever a remote record
+      # holds at the moment the job starts. Selecting `zenodo` builds from the
+      # record's concept DOI, which always resolves to its newest version.
       - name: Check the inputs
         run: |
           test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
           test -f person_review.csv || echo "::warning::No person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
-          if [ -z "${{ inputs.source_csv }}" ]; then
-            echo "Building from the spreadsheet in data/source/"
-          else
-            echo "Building from ${{ inputs.source_csv }}"
-          fi
+          case "${{ inputs.source }}" in
+            zenodo)      echo "Building from the Zenodo record's concept DOI (latest version)" ;;
+            data/source) echo "Building from the spreadsheet committed in data/source/" ;;
+            custom)
+              if [ -z "${{ inputs.source_ref }}" ]; then
+                echo "::error::source is 'custom' but source_ref is empty."
+                exit 1
+              fi
+              echo "Building from ${{ inputs.source_ref }}" ;;
+          esac
 
       # The published data file is also the identifier registry. Seeding it is
       # what keeps every dataset URL stable across rebuilds.
@@ -87,7 +102,11 @@ jobs:
 
       - name: 1 — Spreadsheet to RDF
         run: |
-          python restructure_impactful_datasets.py ${{ inputs.source_csv && format('"{0}"', inputs.source_csv) || '' }} -o build
+          case "${{ inputs.source }}" in
+            zenodo)      python restructure_impactful_datasets.py --zenodo -o build ;;
+            data/source) python restructure_impactful_datasets.py -o build ;;
+            custom)      python restructure_impactful_datasets.py "${{ inputs.source_ref }}" -o build ;;
+          esac
 
       - name: 2 — RDF to schema.org
         run: |
@@ -123,6 +142,14 @@ jobs:
           col = json.load(open("build/column_statistics.json"))
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write("## Data and statistics rebuilt\n\n")
+              src = col.get("source", {})
+              if src.get("source") == "zenodo":
+                  fh.write(f"- source: Zenodo `{src.get('file')}`, version DOI "
+                           f"[`{src.get('version_doi')}`](https://doi.org/{src.get('version_doi')})\n")
+              elif src.get("url"):
+                  fh.write(f"- source: {src['url']}\n")
+              else:
+                  fh.write(f"- source: `{src.get('path')}`\n")
               fh.write(f"- rows read: **{col['rows']}**, encoding repairs: **{col['encoding_repairs']}**\n")
               fh.write(f"- triples published: **{s['triples']:,}**\n\n")
               fh.write("| | |\n|---|---|\n")
@@ -157,12 +184,66 @@ jobs:
             site/
             reports/
 
+      # Staged before the commit step and reported either way, so a run with
+      # commit turned off still shows exactly what it would have changed.
+      - name: List what changed
+        run: |
+          git add impactful_datasets.jsonld site/ reports/
+          git diff --staged --name-status > /tmp/changed.txt || true
+          if [ ! -s /tmp/changed.txt ]; then
+            echo "CHANGED=0" >> $GITHUB_ENV
+            echo "Nothing changed; the outputs already match the source."
+            echo "## Files updated" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "None. The rebuild produced the same bytes that are already committed." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          echo "CHANGED=$(wc -l < /tmp/changed.txt)" >> $GITHUB_ENV
+          cat /tmp/changed.txt
+          python - <<'PY'
+          import os, subprocess
+          WORD = {"A": "added", "M": "modified", "D": "deleted",
+                  "C": "copied", "T": "type changed"}
+          rows = []
+          for line in open("/tmp/changed.txt"):
+              parts = line.rstrip("\n").split("\t")
+              if len(parts) < 2:
+                  continue
+              code, path = parts[0], parts[-1]
+              if code.startswith("R"):
+                  what = "renamed"
+              else:
+                  what = WORD.get(code[0], code)
+              size = ""
+              if os.path.exists(path):
+                  n = os.path.getsize(path)
+                  size = f"{n/1024:.0f} KB" if n >= 1024 else f"{n} B"
+              rows.append((what, path, size))
+          committing = os.environ.get("COMMIT_ENABLED") == "true"
+          head = "Files updated" if committing else "Files that would be updated"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write(f"## {head}\n\n")
+              if not committing:
+                  fh.write("`commit` was off for this run, so nothing was pushed.\n\n")
+              fh.write("| | File | Size |\n|---|---|---|\n")
+              for what, path, size in sorted(rows, key=lambda r: r[1]):
+                  fh.write(f"| {what} | `{path}` | {size} |\n")
+              fh.write(f"\n{len(rows)} file{'s' if len(rows) != 1 else ''} in total.\n")
+          PY
+        env:
+          COMMIT_ENABLED: ${{ inputs.commit }}
+
       - name: Commit
-        if: ${{ inputs.commit }}
+        if: ${{ inputs.commit && env.CHANGED != '0' }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add impactful_datasets.jsonld site/ reports/
-          git diff --staged --quiet && echo "nothing changed" && exit 0
-          git commit -m "Rebuild data and statistics${{ inputs.source_csv && format(' from {0}', inputs.source_csv) || '' }}"
+          # The version DOI goes in the commit message, so the history records
+          # exactly which version of the record each rebuild came from.
+          SRC=$(python -c "import json;s=json.load(open('reports/column_statistics.json'))['source'];print(s.get('version_doi') or s.get('url') or s.get('path') or 'unknown')")
+          git commit -m "Rebuild data and statistics from $SRC"
           git push
+          SHA=$(git rev-parse --short HEAD)
+          echo "Pushed $SHA"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Committed as [\`$SHA\`](${{ github.server_url }}/${{ github.repository }}/commit/$SHA)." >> $GITHUB_STEP_SUMMARY

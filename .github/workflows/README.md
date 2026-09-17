@@ -62,6 +62,15 @@ reports/                     written by workflow 1
 
 ## Inputs
 
+Workflow 1 builds from the CSV committed in `data/source/` by default, so a run
+uses a file that is in the repository and has been reviewed.
+
+Setting `source` to `zenodo` builds from the nominations record instead. Its
+concept DOI [`10.5281/zenodo.20722709`](https://doi.org/10.5281/zenodo.20722709)
+always resolves to the newest version, so once new nominations are published as a
+new version of that record, that is how they reach the site. `custom` takes a
+path, a URL or a specific version DOI in `source_ref`.
+
 All three take a `commit` or `dry_run` toggle. Workflow 3 has `dry_run` **on by
 default**: it assembles the change, runs its safety checks and prints the diff
 without pushing.

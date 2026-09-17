@@ -217,9 +217,41 @@ Needs the secret `AGU_DATA_BOT_TOKEN`. See [SETUP.md](SETUP.md).
 
 ### 1. `restructure_impactful_datasets.py`
 
-Spreadsheet in, RDF out. The spreadsheet can be a path, an `https://` URL, or
-omitted entirely, in which case it uses the single CSV in `data/source/`. The real work is guessing where a single spreadsheet cell holds
-more than one value, which happens three different ways in this file:
+Spreadsheet in, RDF out. It can come from four places:
+
+```bash
+python restructure_impactful_datasets.py                    # the CSV in data/source/ — the default
+python restructure_impactful_datasets.py --zenodo           # the Zenodo record, latest version
+python restructure_impactful_datasets.py path/to/file.csv   # a path
+python restructure_impactful_datasets.py https://…/file.csv # any URL
+```
+
+The committed CSV is the default, so an ordinary build uses a file that is in the
+repository and has been through review rather than whatever a remote record holds
+at the moment the job runs. Pulling from Zenodo is a deliberate choice. The
+default finds the CSV in `data/source/` by glob rather than by name, since the
+export filename carries a date and changes each time the sheet is re-exported.
+
+**Zenodo is where the nominations are published.** The record's concept DOI,
+[`10.5281/zenodo.20722709`](https://doi.org/10.5281/zenodo.20722709), always
+resolves to its most recent version, so `--zenodo` picks up new nominations with
+nothing here to change. A specific version DOI pins a build to one version.
+
+Two things it does on the way:
+
+- **Verifies the checksum.** Zenodo publishes an md5 for every file. A truncated
+  download is otherwise a silent corruption, and checking costs nothing.
+- **Records where the data came from.** Version DOI, record id, filename,
+  checksum and byte count go into `column_statistics.json` and the column report,
+  and the workflow puts the version DOI in the commit message.
+
+It deliberately does **not** follow `links.latest` after fetching. Requesting a
+concept record already redirects to the newest version, and chasing that link
+would silently upgrade a build pinned to an older version DOI, which is the
+opposite of what pinning is for.
+
+The real work is guessing where a single spreadsheet cell holds more than one
+value, which happens three different ways in this file:
 
 - **delimiter-separated lists** — `;` is reliable; commas are not, since
   `Jochum, Klaus Peter` is one person and `A. J. Newman, M. P. Clark` is two

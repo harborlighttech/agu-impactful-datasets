@@ -156,9 +156,10 @@ to guess:
 Nominations arrive through the same form into the same spreadsheet. Nothing
 about that has to change.
 
-1. Export the sheet and replace the file in `data/source/`. The filename can
-   change; the default finds whichever CSV is there. A URL works too, if the
-   export is published somewhere fetchable.
+1. Either replace the file in `data/source/` with the new export, or publish a
+   new version of the Zenodo record and run workflow 1 with `source` set to
+   `zenodo`. The committed CSV is the default; the filename can change, since
+   the default finds whichever CSV is in the directory.
 2. Run **1 · Build data and statistics**. Existing datasets keep their identifiers; new ones
    are minted fresh.
 3. If the run reports new identifiers and you did not add datasets, stop. Re-run
