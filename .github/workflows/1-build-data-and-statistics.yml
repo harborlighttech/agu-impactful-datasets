@@ -1,0 +1,158 @@
+name: 1 · Build data and statistics
+
+# One pass over the whole data side: the nomination spreadsheet in, the published
+# schema.org file and its statistics out.
+#
+# This replaces what used to be two workflows. Splitting them was a false economy:
+# the statistics are measured from the published file, so they could never be
+# produced without first producing it, and running them apart only created a way
+# for the reports to describe a file that no longer existed.
+#
+# The order is fixed by what each step reads:
+#
+#   1. restructure_impactful_datasets.py   spreadsheet -> RDF working graph
+#   2. build_website.py                    working graph -> schema.org file (+ site)
+#   3. analyze_graph.py                    schema.org file -> statistics, diagram
+#
+# Step 2 also writes the site, because the site is built from the same records in
+# the same pass. Workflow 2 previews it; workflow 3 proposes it to AGU.
+on:
+  workflow_dispatch:
+    inputs:
+      source_csv:
+        description: "Path to the nomination spreadsheet"
+        required: true
+        default: "data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv"
+      base_url:
+        description: "Address the site is served from"
+        required: true
+        default: "https://data.agu.org/impactful-datasets/"
+      allow_new_ids:
+        description: "Permit new identifiers — expected only when datasets are added"
+        type: boolean
+        default: false
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pandas rdflib pillow
+
+      - name: Check the inputs
+        run: |
+          test -f "${{ inputs.source_csv }}" || { echo "::error::No spreadsheet at ${{ inputs.source_csv }}"; exit 1; }
+          test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
+          test -f person_review.csv || echo "::warning::No person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
+          echo "Source: $(wc -l < "${{ inputs.source_csv }}") lines"
+
+      # The published data file is also the identifier registry. Seeding it is
+      # what keeps every dataset URL stable across rebuilds.
+      - name: Seed the identifier registry
+        run: |
+          mkdir -p build/data
+          if [ -f site/data/impactful_datasets.data.jsonld ]; then
+            cp site/data/impactful_datasets.data.jsonld build/data/
+            echo "Seeded $(python -c "import json;print(len([n for n in json.load(open('build/data/impactful_datasets.data.jsonld'))['@graph'] if n.get('@type')=='Dataset']))") existing identifiers"
+          else
+            echo "::warning::No existing data file. Every identifier will be minted fresh — correct only on a first run."
+          fi
+
+      - name: 1 — Spreadsheet to RDF
+        run: python restructure_impactful_datasets.py "${{ inputs.source_csv }}" -o build
+
+      - name: 2 — RDF to schema.org
+        run: |
+          python build_website.py build/impactful_datasets.jsonld \
+            --logo assets/AGU_Logo_H_CMYK.png \
+            --feature-image assets/story-feature-source.jpg \
+            --base-url "${{ inputs.base_url }}" \
+            -o build | tee build.log
+
+      # A rebuild that reissues identifiers has broken every published URL. Catch
+      # it here rather than after it is live.
+      - name: Guard against renumbered identifiers
+        run: |
+          MINTED=$(grep -o '[0-9]\+ new id' build.log | head -1 | grep -o '[0-9]\+')
+          MINTED=${MINTED:-0}
+          echo "identifiers minted this run: $MINTED"
+          if [ "$MINTED" -gt 0 ] && [ "${{ inputs.allow_new_ids }}" != "true" ]; then
+            echo "::error::$MINTED identifiers were minted. If datasets were genuinely added, re-run with allow_new_ids. If not, the registry was not seeded and every existing URL would break."
+            exit 1
+          fi
+
+      - name: 3 — Statistics from the published file
+        run: |
+          python analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
+          python document_schema_model.py build/data/impactful_datasets.data.jsonld \
+            -o build/schema_model.svg
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import json, os
+          s = json.load(open("build/graph_statistics.json"))
+          col = json.load(open("build/column_statistics.json"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Data and statistics rebuilt\n\n")
+              fh.write(f"- rows read: **{col['rows']}**, encoding repairs: **{col['encoding_repairs']}**\n")
+              fh.write(f"- triples published: **{s['triples']:,}**\n\n")
+              fh.write("| | |\n|---|---|\n")
+              fh.write(f"| Datasets | **{s['datasets']}** |\n")
+              fh.write(f"| Nominators | **{s['nominators']}** |\n")
+              fh.write(f"| Nominations | **{s['nominations']}** |\n")
+              fh.write(f"| Discipline groups | **{s['discipline_groups']}** |\n\n")
+              fh.write("### Datasets per discipline group\n\n| Group | Datasets |\n|---|---|\n")
+              for d in s["disciplines"]:
+                  fh.write(f"| {d['group']} | {d['datasets']} |\n")
+              fh.write("\n### Classes\n\n| Class | Instances |\n|---|---|\n")
+              for c in s["classes"]:
+                  fh.write(f"| `{c['class']}` | {c['instances']} |\n")
+          PY
+
+      - name: Publish outputs
+        run: |
+          mkdir -p reports
+          rm -rf site && mkdir -p site
+          cp build/impactful_datasets.jsonld .
+          cp -r build/index.html build/assets build/data site/
+          cp build/column_report.md build/column_statistics.json \
+             build/graph_statistics.md build/graph_statistics.json \
+             build/conceptual_model.svg build/schema_model.svg \
+             build/party_report.csv reports/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-and-statistics
+          path: |
+            impactful_datasets.jsonld
+            site/
+            reports/
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add impactful_datasets.jsonld site/ reports/
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Rebuild data and statistics from ${{ inputs.source_csv }}"
+          git push

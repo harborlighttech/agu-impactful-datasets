@@ -1,91 +1,76 @@
 # GitHub Actions workflows
 
-Four manually-triggered workflows. Run them from the **Actions** tab → pick the
-workflow → **Run workflow**. None of them run automatically; nothing here is
-triggered by a push.
+Three manually-triggered workflows. Run them from the **Actions** tab → pick the
+workflow → **Run workflow**. Nothing runs on push.
 
 | Workflow | Does | Run it when |
 |---|---|---|
-| **0 · Full pipeline** | all three steps in one job | a new spreadsheet export arrives |
-| **1 · Rebuild RDF graph** | CSV → `impactful_datasets.jsonld` + column report | the source CSV changed |
-| **2 · Graph statistics** | graph → statistics + conceptual model | you want the reports refreshed |
-| **3 · Build site** | graph → published data file + static site | the site or the party rules changed |
-| **4 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages as a staging preview | you want to see a build on a real URL |
-| **5 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the built site is ready to go live |
+| **1 · Build data and statistics** | spreadsheet → schema.org JSON-LD → statistics, diagrams and site | the spreadsheet changed, or the pipeline did |
+| **2 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages | you want to see a build on a real URL |
+| **3 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the build is ready to go live |
 
-Step 2 is optional: it only produces reporting, and step 3 does not depend on it.
-Steps 1 and 3 are required, in that order. Deployment is deliberately separate
-from the build, so a rebuild can be inspected before anything goes live.
+Workflow 1 used to be two, one for the RDF graph and one for the statistics.
+They were merged because the statistics are measured from the published
+schema.org file, so they could never run without first producing it. Keeping them
+apart only created a way for the reports to describe a file that no longer
+existed.
 
-GitHub Pages needs one-time setup: **Settings → Pages → Source → "GitHub
-Actions"**. The site is served from `site/`, including `site/data/`, because the
-page fetches its data over HTTP and will not work from a `file://` path.
+## What workflow 1 does, in order
+
+```
+restructure_impactful_datasets.py   spreadsheet  -> RDF working graph
+build_website.py                    working graph -> schema.org JSON-LD + site
+analyze_graph.py                    schema.org    -> statistics + model diagram
+document_schema_model.py            schema.org    -> full model diagram
+```
+
+Each step reads the previous one's output, so the order is not a preference.
+The statistics come last on purpose: they describe what was actually published
+rather than what the pipeline intended.
+
+Every run writes a summary to the Actions page with the dataset, nominator,
+nomination and discipline-group counts, a table of datasets per discipline
+group, and every class in the file with its instance count.
+
+## The identifier guard
+
+`site/data/impactful_datasets.data.jsonld` is the published data **and** the
+identifier registry. Workflow 1 seeds it into the build directory first, then
+fails the job if any identifier was minted without `allow_new_ids` set.
+
+Without that seeding a run reports `133 new ids minted`, renumbers every dataset
+and breaks every published link. When you genuinely add datasets, re-run with
+`allow_new_ids` and check the count matches the number added.
 
 ## Expected repository layout
 
 ```
-.github/workflows/          the four files in this folder
+.github/workflows/      these files
 restructure_impactful_datasets.py
-analyze_graph.py
 build_website.py
-person_review.csv           reviewed party classifications; the DECISION column
-                            overrides every heuristic
-assets/
-  AGU_Logo_H_CMYK.png       brand mark
-  story-feature-source.jpg  full-resolution photo for the article callout
-data/source/
-  Impactful_Datasets_v1_June_16_-_CSV_Format.csv
-impactful_datasets.jsonld   written by step 1
-site/                       written by step 3 — this is what gets served
-reports/                    written by steps 1, 2 and 3
+analyze_graph.py
+document_schema_model.py
+review_person_types.py
+person_review.csv       reviewed party classifications; DECISION overrides
+assets/                 AGU_Logo_H_CMYK.png, story-feature-source.jpg
+data/source/            the nomination spreadsheet
+impactful_datasets.jsonld    written by workflow 1
+site/                        written by workflow 1, published by 2 and 3
+reports/                     written by workflow 1
 ```
-
-Two paths are hard-coded in the workflows and are worth knowing about:
-`assets/AGU_Logo_H_CMYK.png` and `assets/story-feature-source.jpg`. If either is
-missing the build still succeeds, with a warning and an empty image slot.
-
-## The identifier guard, and why it matters
-
-`site/data/impactful_datasets.data.jsonld` is not only the published data — it is
-the **identifier registry**. Every dataset URL (`#/dataset/agu-0004-argo`) depends
-on the id in that file, and the build keeps ids stable by reading the existing
-file and reusing what it finds.
-
-So the workflows do two things before and after building:
-
-1. **Seed** the committed data file into the build directory first. Without this
-   the build has nothing to match against and mints a fresh id for every dataset.
-2. **Fail the job** if any id was minted and `allow_new_ids` was not enabled.
-
-That guard is not hypothetical. A build with no seeded registry reports
-`133 new ids minted`, renumbers every dataset from `agu-0001` to `agu-0134`, and
-breaks every published link. Tested both ways: seeded builds report `0 new ids
-minted` and pass; unseeded builds trip the guard and stop.
-
-**When you add new datasets**, some ids *should* be minted. Re-run with
-`allow_new_ids` enabled. Check the count matches the number of datasets actually
-added — if you added three and the log says 136, the registry was not read.
 
 ## Inputs
 
-All four take a `commit` toggle. Leave it on to have the bot commit results back
-to the branch; turn it off to inspect the artifacts first — every run uploads its
-outputs whether or not it commits.
+All three take a `commit` or `dry_run` toggle. Workflow 3 has `dry_run` **on by
+default**: it assembles the change, runs its safety checks and prints the diff
+without pushing.
 
-Step 3 and the full pipeline also take:
+Workflow 1 also takes `base_url`, the address the site is served from, which is
+written into the canonical page URLs in the data file.
 
-- `base_url` — the site address used for canonical page URLs in the data file
-- `data_url` — where the page fetches its data from; blank uses the relative path,
-  set it to an absolute URL once the data file has a permanent home
-- `featured` — the dataset shown if someone lands on the detail page cold
-- `allow_new_ids` — see above
+## Publishing to data.agu.org
 
-## What each run reports
-
-Every workflow writes a summary to the run page: rows read and encoding repairs
-(step 1), triples and nominator counts with the multi-nominator table (step 2),
-dataset counts and the party-type breakdown by confidence (step 3).
-
-The encoding repair count is worth watching. The source spreadsheet is not valid
-UTF-8 — sixteen bytes are Mac Roman — and the script repairs them. If that number
-changes, the source encoding changed.
+Workflow 3 needs a bot account with a fork of `AGU-Data/agu-data.github.io` and a
+**classic** personal access token with the `public_repo` scope, stored as the
+secret `AGU_DATA_BOT_TOKEN`. See `SETUP.md` for why a fine-grained token cannot
+work.

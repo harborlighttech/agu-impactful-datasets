@@ -3,7 +3,7 @@
 Everything needed to build and publish the collection is in here. This is the
 path from an empty GitHub repository to a pull request against the live site.
 
-The whole pipeline is four Python scripts and six manually-triggered workflows.
+The whole pipeline is four Python scripts and three manually-triggered workflows.
 There is no server, no database and no hosted service to pay for.
 
 ---
@@ -30,7 +30,7 @@ deliberate:
 
 | Path | Why it is committed |
 | --- | --- |
-| `site/` | what gets published, and what workflow 5 copies |
+| `site/` | what gets published, and what workflow 3 copies |
 | `site/data/impactful_datasets.data.jsonld` | also the **identifier registry** — the next build reads it to keep URLs stable |
 | `reports/` | so changes to the statistics show up in a pull request diff |
 | `impactful_datasets.jsonld` | the working RDF graph, input to steps 2 and 3 |
@@ -48,22 +48,22 @@ easier to read than a failed job.
 ```bash
 pip install pandas rdflib pillow
 
-# the registry has to be in place before the site build runs
+# the registry has to be in place before the build runs
 mkdir -p build/data
 cp site/data/impactful_datasets.data.jsonld build/data/
 
 python restructure_impactful_datasets.py \
     data/source/Impactful_Datasets_v1_June_16_-_CSV_Format.csv -o build
-python analyze_graph.py build/impactful_datasets.jsonld -o build
-python document_schema_model.py site/data/impactful_datasets.data.jsonld \
-    -o build/schema_model.svg
 python build_website.py build/impactful_datasets.jsonld \
     --logo assets/AGU_Logo_H_CMYK.png \
     --feature-image assets/story-feature-source.jpg \
     --base-url "https://data.agu.org/impactful-datasets/" -o build
+python analyze_graph.py build/data/impactful_datasets.data.jsonld -o build
+python document_schema_model.py build/data/impactful_datasets.data.jsonld \
+    -o build/schema_model.svg
 ```
 
-The line to watch is the last one. It should say **`0 new ids minted`**. Any
+The line to watch is the second one. It should say **`0 new ids minted`**. Any
 other number means the registry was not read, and publishing would break every
 existing link.
 
@@ -79,7 +79,7 @@ cd build && python -m http.server
 
 The live site is a directory inside
 [`AGU-Data/agu-data.github.io`](https://github.com/AGU-Data/agu-data.github.io),
-which belongs to another organisation. Workflow 5 proposes changes to it as a
+which belongs to another organisation. Workflow 3 proposes changes to it as a
 pull request from a fork, so nobody at AGU-Data has to install or approve
 anything.
 
@@ -106,7 +106,7 @@ secret, named `AGU_DATA_BOT_TOKEN`.
 
 ## 4. Optional: turn on the preview
 
-Workflow 4 publishes `site/` to this repository's own Pages, which is useful for
+Workflow 2 publishes `site/` to this repository's own Pages, which is useful for
 looking at a build on a real URL before proposing it to AGU. Settings → Pages →
 Source → **GitHub Actions**.
 
@@ -120,22 +120,21 @@ From the **Actions** tab. Nothing runs on push; every workflow is manual.
 
 | When | Run |
 | --- | --- |
-| A new spreadsheet export arrives | **0 · Full pipeline** |
-| Only the source CSV changed | **1**, then **3** |
-| You want the reports refreshed | **2** |
-| The site or party rules changed | **3** |
-| You want to see a build on a URL | **4** |
-| The build is ready to go live | **5** |
+| The spreadsheet changed, or the pipeline did | **1 · Build data and statistics** |
+| You want to see a build on a real URL | **2 · Preview on this repo's Pages** |
+| The build is ready to go live | **3 · Open a pull request on agu-data.github.io** |
 
-Workflow 5 has `dry_run` **on by default**. It clones, assembles the change,
-runs its safety checks and prints the diff without pushing. Run it that way
-first.
+Workflow 1 does the whole data side in one pass: spreadsheet to RDF, RDF to the
+schema.org file, then statistics measured from that file. It writes a summary to
+the run page with the dataset, nominator, nomination and discipline-group counts,
+datasets per discipline group, and every class in the file with its count.
 
----
+Workflow 3 has `dry_run` **on by default**. It clones, assembles the change, runs
+its safety checks and prints the diff without pushing. Run it that way first.
 
 ## What protects the other organisation's repository
 
-Workflow 5 writes into somebody else's site, so it is built to fail rather than
+Workflow 3 writes into somebody else's site, so it is built to fail rather than
 to guess:
 
 - **One directory.** The tree is emptied and rewritten beneath
@@ -158,11 +157,11 @@ Nominations arrive through the same form into the same spreadsheet. Nothing
 about that has to change.
 
 1. Export the sheet and replace the file in `data/source/`.
-2. Run **0 · Full pipeline**. Existing datasets keep their identifiers; new ones
+2. Run **1 · Build data and statistics**. Existing datasets keep their identifiers; new ones
    are minted fresh.
 3. If the run reports new identifiers and you did not add datasets, stop. Re-run
    with `allow_new_ids` only when the count matches the number genuinely added.
-4. Run **5** to propose the update.
+4. Run **3** to propose the update.
 
 ---
 

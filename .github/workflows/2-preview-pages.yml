@@ -1,9 +1,9 @@
-name: 4 · Preview on this repo's Pages
+name: 2 · Preview on this repo's Pages
 
 # Publishes site/ to THIS repository's GitHub Pages, as a staging preview.
 #
 # This is not how the site goes live. The public site is a directory inside
-# AGU-Data/agu-data.github.io, and workflow 5 proposes changes to it. Use this
+# AGU-Data/agu-data.github.io, and workflow 3 proposes changes to it. Use this
 # one to look at a build on a real URL -- and to hand reviewers a link -- before
 # opening a pull request against somebody else's repository.
 #
@@ -31,7 +31,7 @@ jobs:
 
       - name: Check the site has been built
         run: |
-          test -f site/index.html || { echo "::error::No site/index.html. Run '3 · Build site' first."; exit 1; }
+          test -f site/index.html || { echo "::error::No site/index.html. Run '1 · Build data and statistics' first."; exit 1; }
           test -f site/data/impactful_datasets.data.jsonld || { echo "::error::No data file in site/data/."; exit 1; }
           echo "Publishing $(du -sh site | cut -f1)"
 

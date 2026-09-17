@@ -1,4 +1,4 @@
-name: 5 · Open a pull request on agu-data.github.io
+name: 3 · Open a pull request on agu-data.github.io
 
 # Publishes site/ into impactful-datasets/ on AGU-Data/agu-data.github.io by
 # opening a pull request from a fork.
@@ -76,7 +76,7 @@ jobs:
 
       - name: Check the site has been built
         run: |
-          test -f site/index.html || { echo "::error::No site/index.html. Run '3 · Build site' first."; exit 1; }
+          test -f site/index.html || { echo "::error::No site/index.html. Run '1 · Build data and statistics' first."; exit 1; }
           test -f site/data/impactful_datasets.data.jsonld || { echo "::error::No data file in site/data/."; exit 1; }
           echo "Proposing $(du -sh site | cut -f1) across $(find site -type f | wc -l) files"
 

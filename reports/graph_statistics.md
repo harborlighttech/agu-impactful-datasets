@@ -1,85 +1,59 @@
-# Graph statistics — AGU Impactful Datasets
+# Statistics
 
-Source graph: `impactful_datasets.jsonld` — 17,439 triples.
+Measured from `impactful_datasets.data.jsonld`, the schema.org file the site serves and other
+systems harvest. 9,616 triples.
 
-## Headline counts
-
-| Measure | Value |
+| | |
 |---|---|
-| Datasets (`dcat:Dataset`) | 133 |
-| Nominations (`agu:Nomination`) | 133 |
-| Distinct nominators | 161 |
-| Nominator links (non-distinct) | 174 |
-| Nominators identified by ORCID | 155 |
-| Repositories (`schema:DataCatalog`) | 117 |
-| Organizations (affiliations) | 159 |
-| Discipline groups (`skos:Concept`) | 8 |
+| Datasets | **133** |
+| Nominators | **161** |
+| Nominations | **174** |
+| Discipline groups | **9** |
 
-Nominators per nomination: `{1: 118, 2: 4, 3: 5, 4: 2, 5: 2, 6: 1, 9: 1}`
+Nominators are counted once each, so there are more nominations than nominators:
+some people put forward more than one dataset.
 
-## Classes and instance counts
+## Datasets per discipline group
 
-| Class | Instances |
+| Discipline group | Datasets |
 |---|---|
-| `agu:ReuseExample` | 397 |
-| `schema:PropertyValue` | 370 |
-| `agu:CreatorStatement` | 262 |
-| `dct:BibliographicResource` | 201 |
-| `schema:CreativeWork` | 201 |
-| `agu:Statement` | 167 |
-| `foaf:Person` | 161 |
-| `schema:Person` | 161 |
-| `agu:JustificationStatement` | 161 |
-| `foaf:Organization` | 159 |
-| `schema:Organization` | 159 |
-| `dcat:Dataset` | 133 |
-| `prov:Entity` | 133 |
-| `schema:Dataset` | 133 |
-| `agu:Nomination` | 133 |
-| `agu:SourceRow` | 133 |
-| `agu:CuratorStatement` | 126 |
-| `dcat:Catalog` | 118 |
-| `schema:DataCatalog` | 117 |
-| `agu:ImpactDimension` | 51 |
-| `skos:Concept` | 8 |
-| `skos:ConceptScheme` | 1 |
-| `prov:Collection` | 1 |
+| Ocean Science, Hydrology, Cryosphere | 31 |
+| Atmospheric Science, Space Weather | 30 |
+| Global Environmental Change, Paleoceanography and Paleoclimatology, Biogeoscience | 30 |
+| Earth’s Interior, Geodesy | 12 |
+| Earth Surface, Natural Hazards, Geology, Near Surface Geophysics | 10 |
+| Geohealth, Society, Education | 10 |
+| Space and Planetary Science | 9 |
+| Earth & Planetary Materials | 2 |
+| Nonlinear Geophysics, Machine Learning, Informatics | 0 |
 
-Several nodes are deliberately dual-typed (`dcat:Dataset` + `schema:Dataset`,
-`schema:Person` + `foaf:Person`), so these rows are not disjoint and do not sum
-to a node count.
+A dataset nominated under two groups counts in both, so the column can total
+more than the number of datasets. Groups with no datasets are listed rather than
+dropped.
 
-## Datasets with more than one nominator (15 of 133)
+## Classes
 
-| Nominators | Dataset |
-|---|---|
-| 9 | 2020 TCCON Data Release |
-| 6 | Integrated Multi-satellitE Retrievals for the Global Precipitation Measurement (GPM) mission (IMERG) |
-| 5 | International Sunspot Number |
-| 5 | The National Geologic Map Database (NGMDB) |
-| 4 | Sea Ice Index |
-| 4 | The GEOROC database |
-| 3 | ARTMIP Database |
-| 3 | Argo |
-| 3 | California Climate Projections |
-| 3 | ECOSTRESS Tiled Land Surface Temperature and Emissivity Instantaneous L2 Global 70 m V002 |
-| 3 | Fluxnet (or Ameriflux for N America) |
-| 2 | A global open-source dataset of monthly irrigated and rainfed cropped areas (MIRCA-OS) for the 21st century |
-| 2 | OMNI |
-| 2 | Ozone data collection at WOUDC |
-| 2 | PetDB |
+Every type asserted in the file, and how many nodes carry it.
 
-## People nominating more than one dataset (10)
+| Class | Namespace | Instances |
+|---|---|---|
+| `schema:CreativeWork` | schema | 759 |
+| `schema:PropertyValue` | schema | 478 |
+| `agu:ResponsibleParty` | agu | 308 |
+| `schema:Organization` | schema | 188 |
+| `schema:EndorseAction` | schema | 174 |
+| `schema:Person` | schema | 168 |
+| `schema:Dataset` | schema | 133 |
+| `schema:ItemList` | schema | 133 |
+| `schema:DataCatalog` | schema | 111 |
+| `schema:DefinedTerm` | schema | 60 |
+| `rdf:Property` | rdf | 2 |
+| `owl:Class` | owl | 1 |
+| `schema:DefinedTermSet` | schema | 1 |
 
-| Datasets | Nominator |
-|---|---|
-| 4 | Josh Laughner |
-| 3 | Peiyu Cao |
-| 2 | Angus Nixon |
-| 2 | Bethany Ehlmann |
-| 2 | Debra Wunch |
-| 2 | Erin Satterthwaite |
-| 2 | James T Morris |
-| 2 | Marthe Klöcking |
-| 2 | Paola Mazzoglio |
-| 2 | Zhong Liu |
+- **agu** — 1 class
+- **owl** — 1 class
+- **rdf** — 1 class
+- **schema** — 10 classes
+
+A node can carry more than one type, so these do not sum to a node count.
