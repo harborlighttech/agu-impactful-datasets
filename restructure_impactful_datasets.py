@@ -85,6 +85,10 @@ def resolve_source(given):
 
 SRC_NAME, SRC_BYTES = resolve_source(args.csv)
 SRC = SRC_NAME
+# What to call the source in the report. A path shows its filename; a URL shows
+# the whole thing, since its last segment alone rarely identifies anything.
+SRC_LABEL = (SRC_NAME if re.match(r"https?://", SRC_NAME, re.I)
+             else Path(SRC_NAME).name)
 OUTDIR = args.outdir
 OUTDIR.mkdir(parents=True, exist_ok=True)
 CLEAN = OUTDIR / "_clean.csv"
@@ -348,7 +352,10 @@ CONTEXT = {
     "justification": {"@id": "agu:justification"},
     "interactionStatement": {"@id": "agu:interactionStatement"},
     "impactDimension": {"@id": "agu:impactDimension"},
-    "sequence": {"@id": "agu:nominatorSequence", "@type": "xsd:integer"},
+    # A plain string: the value is the nomination form's slot label, and some
+    # rows label their nominators 1a, 1b, 1c. Typed xsd:integer, every consumer
+    # would try to parse "1c" as a number and warn.
+    "sequence": {"@id": "agu:nominatorSequence"},
     "affiliation": {"@id": "schema:affiliation", "@type": "@id"},
     "wasDerivedFrom": {"@id": "prov:wasDerivedFrom", "@type": "@id"},
     "sourceColumn": {"@id": "agu:sourceColumn"},
@@ -615,7 +622,7 @@ for s in d["column_stats"]:
 
 md = f"""# Column report — AGU *Impactful Datasets* v1
 
-**Source:** `{SRC.name}` · {len(df)} data rows × {len(SHORT)} columns
+**Source:** `{SRC_LABEL}` · {len(df)} data rows × {len(SHORT)} columns
 **Output:** `impactful_datasets.jsonld` — {TRIPLE_NOTE}{len(doc["@graph"])} nodes
 
 ---
