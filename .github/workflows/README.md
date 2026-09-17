@@ -9,12 +9,6 @@ Run them from the **Actions** tab → pick the workflow → **Run workflow**.
 | **3 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages | you want to see a build on a real URL |
 | **4 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the build is ready to go live |
 
-Workflow 1 used to be two, one for the RDF graph and one for the statistics.
-They were merged because the statistics are measured from the published
-schema.org file, so they could never run without first producing it. Keeping them
-apart only created a way for the reports to describe a file that no longer
-existed.
-
 ## Reading workflow 2 before you trust a build
  
 Everything upstream of the site involves inference: which delimiter separates the
