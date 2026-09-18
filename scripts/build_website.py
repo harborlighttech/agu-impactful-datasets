@@ -107,8 +107,6 @@ ap.add_argument("--base-url", default="https://data.agu.org/impactful-datasets/"
 args = ap.parse_args()
 JSONLD = args.jsonld
 args.outdir.mkdir(parents=True, exist_ok=True)
-OUT = args.outdir / "impactful_datasets_wireframe.html"
-
 
 def _credit_png():
     """Downscale the credit mark, as for the AGU logo. Self-hosting it keeps the

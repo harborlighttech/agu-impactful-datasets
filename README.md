@@ -349,7 +349,7 @@ assets/js/app.js                      application script
 assets/img/agu-logo.png               brand mark
 assets/img/story-feature.jpg          photo for the article callout on page 1
 data/impactful_datasets.data.jsonld   the published collection, schema.org JSON-LD
-party_report.csv                      every credited party, its assigned type,
+data/cleanup/party_report.csv         every credited party, its assigned type,
                                       the rule that decided it, and a DECISION
                                       column for overriding it
 ```

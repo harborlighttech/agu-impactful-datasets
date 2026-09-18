@@ -52,7 +52,7 @@ jobs:
 
       - name: Check the inputs
         run: |
-          for f in "${{ inputs.data_file }}" reports/column_statistics.json reports/party_report.csv; do
+          for f in "${{ inputs.data_file }}" reports/column_statistics.json data/cleanup/party_report.csv; do
             test -f "$f" || {
               echo "::error::Missing $f. Run '1 · Build data and statistics' first."
               exit 1
@@ -74,7 +74,7 @@ jobs:
           # Two different files, two different questions. party_report.csv says
           # how every credited party was actually typed; person_review.csv says
           # which ones looked doubtful and why.
-          parties = list(csv.DictReader(open("reports/party_report.csv", encoding="utf-8-sig")))
+          parties = list(csv.DictReader(open("data/cleanup/party_report.csv", encoding="utf-8-sig")))
           flagged = list(csv.DictReader(open("data/cleanup/person_review.csv", encoding="utf-8-sig")))
           stats = col["column_stats"]
           src = col.get("source", {})
