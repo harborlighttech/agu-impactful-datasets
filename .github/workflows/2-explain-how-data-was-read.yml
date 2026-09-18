@@ -63,7 +63,7 @@ jobs:
         run: |
           mkdir -p reports
           python scripts/review_person_types.py "${{ inputs.data_file }}" \
-            -o reports/person_review.csv
+            -o data/cleanup/person_review.csv
 
       - name: Write and print the interpretation report
         run: |
@@ -75,7 +75,7 @@ jobs:
           # how every credited party was actually typed; person_review.csv says
           # which ones looked doubtful and why.
           parties = list(csv.DictReader(open("reports/party_report.csv", encoding="utf-8-sig")))
-          flagged = list(csv.DictReader(open("reports/person_review.csv", encoding="utf-8-sig")))
+          flagged = list(csv.DictReader(open("data/cleanup/person_review.csv", encoding="utf-8-sig")))
           stats = col["column_stats"]
           src = col.get("source", {})
 
@@ -154,7 +154,7 @@ jobs:
           low = [p for p in parties if p["confidence"] == "low"]
           if low:
               w(f"**{len(low)} parties were typed on weak evidence.** These are the "
-                "rows most worth a human glance; `reports/person_review.csv` has "
+                "rows most worth a human glance; `data/cleanup/person_review.csv` has "
                 "the reasoning for every one.\n")
           fix = [p for p in flagged if p["suggested_action"] == "split first"]
           drop = [p for p in flagged if p["suggested_action"] == "re-parse or drop"]
@@ -169,8 +169,8 @@ jobs:
                     "fragment that landed in a name field. Giving these a formal "
                     "type would be worse than leaving them.")
               w("")
-              w("Both are artefacts of the original spreadsheet, and both are "
-                "listed in `reports/person_review.csv`.\n")
+              w("Both are artifacts of the original spreadsheet, and both are "
+                "listed in `data/cleanup/person_review.csv`.\n")
 
           report = "\n".join(out)
           open("reports/interpretation.md", "w", encoding="utf-8").write(report)
@@ -188,14 +188,14 @@ jobs:
           name: interpretation
           path: |
             reports/interpretation.md
-            reports/person_review.csv
+            data/cleanup/person_review.csv
 
       - name: Commit
         if: ${{ inputs.commit }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add reports/interpretation.md reports/person_review.csv
+          git add reports/interpretation.md data/cleanup/person_review.csv
           git diff --staged --quiet && echo "report unchanged" && exit 0
           git commit -m "Refresh the interpretation report"
           git push

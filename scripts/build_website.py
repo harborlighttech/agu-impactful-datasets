@@ -91,7 +91,7 @@ ap.add_argument("--feature-image", type=Path, default=None,
 ap.add_argument("--feature-width", type=int, default=360,
                 help="px width the feature image is downscaled to; the callout "
                      "renders it at 112px square, so this covers 3x displays")
-ap.add_argument("--person-review", type=Path, default=Path("data/source/person_review.csv"),
+ap.add_argument("--person-review", type=Path, default=Path("data/cleanup/person_review.csv"),
                 help="reviewed classification of Person-typed names "
                      "(from review_person_types.py); absent = rule 1 only")
 ap.add_argument("--logo-width", type=int, default=620,

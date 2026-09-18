@@ -8,7 +8,7 @@ distinct name, a suggested classification, the evidence behind it, and an empty
 decision column for a human to fill in.
 
 Usage:
-    python review_person_types.py impactful_datasets.data.jsonld -o data/source/person_review.csv
+    python review_person_types.py impactful_datasets.data.jsonld -o data/cleanup/person_review.csv
 """
 import argparse, collections, csv, json, re
 from pathlib import Path
@@ -16,7 +16,7 @@ from pathlib import Path
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("jsonld", type=Path)
-ap.add_argument("-o", "--out", type=Path, default=Path("data/source/person_review.csv"))
+ap.add_argument("-o", "--out", type=Path, default=Path("data/cleanup/person_review.csv"))
 args = ap.parse_args()
 
 G = json.loads(args.jsonld.read_text(encoding="utf-8"))["@graph"]

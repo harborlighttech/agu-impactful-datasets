@@ -199,7 +199,7 @@ published URL, silently.
 
 ### 2 · Explain how the data was read
 
-Writes `reports/interpretation.md` and `reports/person_review.csv`, and prints the
+Writes `reports/interpretation.md` and `data/cleanup/person_review.csv`, and prints the
 whole report to the run log so it can be read without downloading anything.
 
 Run it between building and previewing. Everything upstream of the site involves
