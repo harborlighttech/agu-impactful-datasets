@@ -1,6 +1,6 @@
 {
   "source": "impactful_datasets.data.jsonld",
-  "triples": 9617,
+  "triples": 9616,
   "datasets": 133,
   "nominators": 161,
   "nominations": 174,
@@ -57,7 +57,12 @@
     {
       "class": "agu:ResponsibleParty",
       "namespace": "agu",
-      "instances": 355
+      "instances": 308
+    },
+    {
+      "class": "schema:Organization",
+      "namespace": "schema",
+      "instances": 188
     },
     {
       "class": "schema:EndorseAction",
@@ -67,12 +72,7 @@
     {
       "class": "schema:Person",
       "namespace": "schema",
-      "instances": 163
-    },
-    {
-      "class": "schema:Organization",
-      "namespace": "schema",
-      "instances": 146
+      "instances": 168
     },
     {
       "class": "schema:Dataset",
