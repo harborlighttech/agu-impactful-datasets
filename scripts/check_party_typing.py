@@ -97,22 +97,37 @@ def main():
           lambda r: "%s (asked for %s, got %s)" % (r["name"], r["DECISION"],
                                                    r["assigned_type"]))
 
-    # The general case. A rule with rows to match that matches none has broken.
+    # The general case: a rule with rows to match that matches none has broken.
+    #
+    # "Rows to match" has to respect precedence, or this fires on healthy data.
+    # A recorded DECISION is answered by R3 before anything else sees the row, and
+    # an ORCID is answered by R1 before R2 does. Counting those rows as work for
+    # the later rule reports a failure every time someone records a decision --
+    # which is exactly what this check did after the first 48 were written, and
+    # it was wrong.
     fired = collections.Counter(r["rule"] for r in rows)
+    undecided = [r for r in rows if r["name"] not in decided]
     expected = {
-        "R1": [r for r in rows if r["orcid"]],
-        "R2": nominators,
-        "R5": [r for r in rows if r["suggested_action"] == "Organization"
-               and r["flag_confidence"] == "high"],
-        "R9": [r for r in rows if r["suggested_action"] == "re-parse or drop"],
-        "R10": [r for r in rows if r["suggested_action"] == "split first"],
+        # claims any row with an ORCID that nobody has ruled on
+        "R1": [r for r in undecided if r["orcid"]],
+        # only reaches nominators without an ORCID and without a flag
+        "R2": [r for r in undecided
+               if "nominator" in (r["roles"] or "") and not r["orcid"]
+               and r["suggested_action"] in ("", "leave as Person")],
+        "R5": [r for r in undecided
+               if r["suggested_action"] == "Organization"
+               and r["flag_confidence"] == "high" and not r["orcid"]],
+        "R9": [r for r in undecided
+               if r["suggested_action"] == "re-parse or drop" and not r["orcid"]],
+        "R10": [r for r in undecided
+                if r["suggested_action"] == "split first" and not r["orcid"]],
     }
     silent = [rule for rule, candidates in expected.items()
               if candidates and not fired[rule]]
     if silent:
         failures.append(
             ("no rule with work to do fires zero times",
-             ["%s matched nothing, but %d row(s) qualify"
+             ["%s matched nothing, but %d undecided row(s) qualify"
               % (rule, len(expected[rule])) for rule in silent]))
     else:
         notes.append("no rule with work to do fires zero times")
