@@ -12,7 +12,7 @@ const DATA = {
 };
 
 /* Discipline comes through as a reference to a DefinedTerm; resolve it to the short
-   key the page groups and colors by. THEME_IDS is filled from the DefinedTermSet
+   key the page groups and colours by. THEME_IDS is filled from the DefinedTermSet
    when the published file loads, with the urn tail as a fallback. */
 const THEME_IDS = {};
 function themeKeysOf(kw){
