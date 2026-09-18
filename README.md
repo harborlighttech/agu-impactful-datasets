@@ -169,6 +169,50 @@ It needs a bot account with a fork and a **classic** token carrying the
 
 ---
 
+## Running it in Docker
+
+`docker-compose.yml` has one service per script, in pipeline order. Every service
+shares one image and bind-mounts the repository at `/repo`, so outputs land on
+the host exactly where the workflows put them and the next service reads them
+from there.
+
+```bash
+docker compose --profile pipeline up      # steps 1 to 3, stopping on failure
+docker compose run --rm cleanup           # one step
+docker compose --profile step2 up         # one stage
+docker compose --profile serve up         # then open http://localhost:8000
+```
+
+| Service | Script |
+|---|---|
+| `graph` | `restructure_impactful_datasets.py` |
+| `cleanup` | `prepare_cleanup.py` |
+| `check` | `check_party_typing.py` |
+| `data` | `build_website.py --data-only` |
+| `stats` | `analyze_graph.py` |
+| `model` | `document_schema_model.py` |
+| `compare` | `compare_to_published.py` |
+| `site` | `build_website.py --from-data` |
+| `serve` | serves `site/` on port 8000 |
+
+`party_typing.py` has no service: it is imported by two of the others, not run.
+
+Tunable through the environment, with the same defaults as the workflows:
+
+```bash
+SOURCE=10.5281/zenodo.20722709 docker compose run --rm graph
+BASE_URL=https://example.org/preview/ docker compose run --rm site
+PUBLISHED=data/output/impactful_datasets.data.jsonld docker compose run --rm compare
+```
+
+Ordering uses `service_completed_successfully` rather than the default. These
+containers exit rather than stay up, so waiting for one to *start* would race
+the file it is supposed to have written.
+
+The `serve` service exists because the page fetches its data over HTTP. Opening
+`site/index.html` from disk shows an empty shelf, which looks like a broken build
+and is not one.
+
 ## The code
 
 All in `scripts/`. Four libraries: pandas, rdflib, pillow — see
