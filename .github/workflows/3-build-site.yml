@@ -1,0 +1,121 @@
+name: 3 · Build the site
+
+# Step 3 of four. The data in, the website out, into site/.
+#
+# The site is rendered from data/output/impactful_datasets.data.jsonld, the file
+# step 2 produced. Not from the RDF graph: the page fetches that same JSON-LD at
+# runtime, so building the markup from it means the two cannot describe different
+# collections. Verified -- a site built either way is byte-identical.
+#
+# Nothing is deployed here. Step 4 proposes the result to data.agu.org.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Address the site is served from"
+        required: true
+        default: "https://data.agu.org/impactful-datasets/"
+      featured:
+        description: "Dataset shown if someone lands on the detail page cold"
+        required: true
+        default: "Argo"
+      commit:
+        description: "Commit site/ back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-site
+  cancel-in-progress: false
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check the inputs
+        run: |
+          test -f data/output/impactful_datasets.data.jsonld || {
+            echo "::error::No data/output/impactful_datasets.data.jsonld. Run '2 · Build the JSON-LD' first."
+            exit 1
+          }
+          test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
+          test -f assets/story-feature-source.jpg || echo "::warning::No feature image; the callout will have an empty slot."
+
+      - name: Build
+        run: |
+          python scripts/build_website.py \
+            --from-data data/output/impactful_datasets.data.jsonld \
+            --logo assets/AGU_Logo_H_CMYK.png \
+            --feature-image assets/story-feature-source.jpg \
+            --featured "${{ inputs.featured }}" \
+            --base-url "${{ inputs.base_url }}" \
+            -o build | tee build.log
+
+      # No identifier guard here, and none needed: this step mints nothing. The
+      # ids come from the file step 2 published, which ships into site/data/ as
+      # the page's own data source.
+      - name: Check the data shipped with the page
+        run: |
+          cmp -s data/output/impactful_datasets.data.jsonld build/data/impactful_datasets.data.jsonld && \
+            echo "the page ships the exact data file step 2 published" || {
+              echo "::error::site/data/ does not match data/output/. The page would render data that was never published."
+              exit 1
+            }
+
+      - name: Check every asset is relative
+        run: |
+          if grep -rEo '(src|href)="/[^"]*"' build/index.html; then
+            echo "::error::Root-relative path in index.html; it would break served from a subdirectory."
+            exit 1
+          fi
+          echo "All asset paths are relative, so the site works under any prefix."
+
+      - name: Publish outputs
+        run: |
+          rm -rf site && mkdir -p site
+          cp -r build/index.html build/assets build/data site/
+
+      - name: Summarise
+        run: |
+          {
+            echo "## Site built"
+            echo ""
+            echo "| File | Size |"
+            echo "|---|---|"
+            find site -type f | sort | while read f; do
+              echo "| \`${f#site/}\` | $(du -h "$f" | cut -f1) |"
+            done
+            echo ""
+            echo "Total: $(du -sh site | cut -f1) across $(find site -type f | wc -l) files."
+            echo ""
+            echo "Preview it locally with \`cd site && python -m http.server\`, "
+            echo "then run **4 · Open a pull request on agu-data.github.io** to propose it."
+          } >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: site
+          path: site/
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/
+          git diff --staged --quiet && echo "site unchanged" && exit 0
+          git commit -m "Rebuild the site"
+          git push

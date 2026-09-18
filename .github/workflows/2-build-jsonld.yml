@@ -1,0 +1,178 @@
+name: 2 · Build the JSON-LD and report the changes
+
+# Step 2 of four. The graph and the reviewer's decisions in; the published
+# schema.org data out, together with an account of what a visitor would notice.
+#
+# Two things make this step worth running on its own.
+#
+# It applies the decisions. data/cleanup/person_review.csv may have been edited
+# since step 1, and those rulings override every heuristic. If the file is
+# missing the build still succeeds, which is why the check below is loud: the
+# result would be quietly different rather than broken.
+#
+# The identifier registry is data/output/impactful_datasets.data.jsonld, in this
+# repository. It is the authoritative record of which dataset holds which id:
+# versioned, reviewable in a pull request, and readable even when the live site
+# is mid-deploy, unreachable, or behind. The build reads it and reuses what it
+# finds; without it every dataset is renumbered and every published URL breaks,
+# with no error to notice.
+#
+# The live file is fetched too, but only as the comparison baseline. Those are
+# genuinely different jobs -- what ids we have assigned, and what visitors can
+# currently see -- and conflating them would mean a deploy failure or a stale CDN
+# could silently reassign identifiers.
+on:
+  workflow_dispatch:
+    inputs:
+      published:
+        description: "Live data file to compare against; blank skips the comparison"
+        required: false
+        default: "https://data.agu.org/impactful-datasets/data/impactful_datasets.data.jsonld"
+      base_url:
+        description: "Address the site is served from"
+        required: true
+        default: "https://data.agu.org/impactful-datasets/"
+      allow_new_ids:
+        description: "Permit new identifiers — expected only when datasets are added"
+        type: boolean
+        default: false
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-jsonld
+  cancel-in-progress: false
+
+jobs:
+  jsonld:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check the inputs
+        run: |
+          test -f data/output/impactful_datasets.jsonld || {
+            echo "::error::No data/output/impactful_datasets.jsonld. Run '1 · Build the graph and cleanup worksheets' first."
+            exit 1
+          }
+          if [ -f data/cleanup/person_review.csv ]; then
+            DECIDED=$(python -c "import csv;print(sum(1 for r in csv.DictReader(open('data/cleanup/person_review.csv',encoding='utf-8-sig')) if (r.get('DECISION') or '').strip()))")
+            echo "Applying $DECIDED reviewer decision(s) from data/cleanup/person_review.csv"
+          else
+            echo "::warning::No data/cleanup/person_review.csv. Every reviewer decision is ignored and parties without an ORCID default to agu:ResponsibleParty."
+          fi
+
+      # The registry, from this repository. Not the live site: a deploy that has
+      # not landed yet, or a cached copy, would silently reassign identifiers.
+      - name: Seed the identifier registry
+        run: |
+          mkdir -p build/data
+          if [ -f data/output/impactful_datasets.data.jsonld ]; then
+            cp data/output/impactful_datasets.data.jsonld build/data/
+            N=$(python -c "import json;print(len([n for n in json.load(open('build/data/impactful_datasets.data.jsonld'))['@graph'] if n.get('@type')=='Dataset']))")
+            echo "Registry: $N identifiers from data/output/impactful_datasets.data.jsonld"
+          else
+            echo "::warning::No registry at data/output/impactful_datasets.data.jsonld. Every identifier will be minted fresh — correct only on a first run."
+          fi
+
+      # Only for the comparison. A failure here costs the diff, never an id.
+      - name: Fetch the live data for comparison
+        if: ${{ inputs.published != '' }}
+        continue-on-error: true
+        run: |
+          curl -fsSL --max-time 60 "${{ inputs.published }}" -o /tmp/published.jsonld \
+            && echo "fetched the live file for comparison" \
+            || echo "::warning::Could not fetch ${{ inputs.published }}; the comparison will report everything as new."
+
+      - name: Build the JSON-LD
+        run: |
+          python scripts/build_website.py data/output/impactful_datasets.jsonld \
+            --logo assets/AGU_Logo_H_CMYK.png \
+            --base-url "${{ inputs.base_url }}" \
+            --data-only \
+            -o build | tee build.log
+
+      - name: Guard against renumbered identifiers
+        run: |
+          MINTED=$(grep -o '[0-9]\+ new id' build.log | head -1 | grep -o '[0-9]\+')
+          MINTED=${MINTED:-0}
+          echo "identifiers minted this run: $MINTED"
+          if [ "$MINTED" -gt 0 ] && [ "${{ inputs.allow_new_ids }}" != "true" ]; then
+            echo "::error::$MINTED identifiers were minted. If datasets were genuinely added, re-run with allow_new_ids. If not, the registry at data/output/impactful_datasets.data.jsonld was not read and every existing URL would break."
+            exit 1
+          fi
+
+      - name: Statistics and model diagrams
+        run: |
+          mkdir -p reports
+          python scripts/analyze_graph.py build/data/impactful_datasets.data.jsonld -o reports
+          python scripts/document_schema_model.py build/data/impactful_datasets.data.jsonld \
+            -o reports/schema_model.svg
+
+      # What a visitor would actually notice. Resources are matched on @id, so
+      # this reports meaning rather than text: reformatting produces no diff, a
+      # renamed dataset or a dropped nomination does.
+      - name: Compare against the published data
+        run: |
+          BASE="${{ inputs.published }}"
+          [ -f /tmp/published.jsonld ] && BASE=/tmp/published.jsonld
+          python scripts/compare_to_published.py build/data/impactful_datasets.data.jsonld \
+            --published "$BASE" \
+            -o reports/changes_vs_published.md
+          {
+            echo ""
+            cat reports/changes_vs_published.md
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import json, os
+          s = json.load(open("reports/graph_statistics.json"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("\n## The published data\n\n")
+              fh.write(f"- triples: **{s['triples']:,}**\n\n")
+              fh.write("| | |\n|---|---|\n")
+              fh.write(f"| Datasets | **{s['datasets']}** |\n")
+              fh.write(f"| Nominators | **{s['nominators']}** |\n")
+              fh.write(f"| Nominations | **{s['nominations']}** |\n")
+              fh.write(f"| Discipline groups | **{s['discipline_groups']}** |\n\n")
+              fh.write("| Discipline group | Datasets |\n|---|---|\n")
+              for d in s["disciplines"]:
+                  fh.write(f"| {d['group']} | {d['datasets']} |\n")
+          PY
+
+      - name: Publish outputs
+        run: |
+          mkdir -p data/output
+          cp build/data/impactful_datasets.data.jsonld data/output/
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: published-data
+          path: |
+            data/output/impactful_datasets.data.jsonld
+            reports/
+
+      - name: Commit
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/output/ reports/
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "Rebuild the published JSON-LD"
+          git push

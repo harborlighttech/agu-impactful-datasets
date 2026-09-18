@@ -72,7 +72,8 @@ from pathlib import Path
 
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("jsonld", type=Path)
+ap.add_argument("jsonld", type=Path, nargs="?",
+                help="the RDF graph; omit it when using --from-data")
 ap.add_argument("--logo", type=Path, default=None,
                 help="AGU logo PNG; omitted = logo slots render empty")
 ap.add_argument("-o", "--outdir", type=Path, default=Path("out"))
@@ -80,6 +81,14 @@ ap.add_argument("--featured", default="Argo",
                 help="title of the dataset shown on page 2 (default: Argo)")
 ap.add_argument("--nominators", type=int, default=0,
                 help="distinct nominator count for the tally; 0 = count from the data")
+ap.add_argument("--from-data", type=Path, default=None, metavar="FILE",
+                help="build the site from a published schema.org file instead of "
+                     "the RDF graph. The page fetches the same file at runtime, "
+                     "so the markup and the data cannot describe different "
+                     "collections.")
+ap.add_argument("--data-only", action="store_true",
+                help="write the schema.org data file and stop, without building "
+                     "the site. Used by the step that produces the JSON-LD.")
 ap.add_argument("--credit-logo", type=Path, default=None,
                 help="Harbor Light Technologies mark. A local file is embedded "
                      "like the AGU logo; without one the page links the hosted "
@@ -91,10 +100,10 @@ ap.add_argument("--feature-image", type=Path, default=None,
 ap.add_argument("--feature-width", type=int, default=360,
                 help="px width the feature image is downscaled to; the callout "
                      "renders it at 112px square, so this covers 3x displays")
-ap.add_argument("--person-review", type=Path,
-                default=Path("data/cleanup/person_review.csv"),
+ap.add_argument("--responsible-party", "--person-review", type=Path,
+                default=Path("data/cleanup/responsible_party.csv"),
                 help="reviewed classification of Person-typed names "
-                     "(from review_person_types.py); absent = rule 1 only")
+                     "(from prepare_cleanup.py); absent = every decision ignored")
 ap.add_argument("--logo-width", type=int, default=620,
                 help="px width the logo is downscaled to before embedding")
 ap.add_argument("--data-file", default="impactful_datasets.data.jsonld",
@@ -153,693 +162,666 @@ def _logo_png():
     return buf.getvalue()
 
 
-d = json.load(open(JSONLD))
-g = d['@graph']; by = {n['@id']: n for n in g}
+# ---------------------------------------------------------------- inputs ----
+# Two ways in. Normally the RDF graph is read and the schema.org data derived
+# from it. With --from-data the published schema.org file is the input instead,
+# and the site is rendered from that: the page fetches the same file at runtime,
+# so building from it guarantees the markup and the data describe one collection
+# rather than two derivations that could drift.
+if not args.from_data:
+    d = json.load(open(JSONLD))
+    g = d['@graph']; by = {n['@id']: n for n in g}
 
-# Discipline groups. Labels are NEVER retyped here -- they are read from the graph,
-# which carries them verbatim from the source spreadsheet, so an abbreviation can
-# never creep in. This map only assigns each group a short key, used to pick its
-# colour in CSS.
-THEME_KEYS = {
-    "id:theme:atmospheric-science-space-weather": "atmos",
-    "id:theme:ocean-science-hydrology-cryosphere": "ocean",
-    "id:theme:global-environmental-change-paleoceanography-and-paleoclimatology-biogeoscience": "biosphere",
-    "id:theme:earth-s-interior-geodesy": "interior",
-    "id:theme:earth-surface-natural-hazards-geology-near-surface-geophysics": "surface",
-    "id:theme:geohealth-society-education": "society",
-    "id:theme:space-and-planetary-science": "space",
-    "id:theme:earth-planetary-materials": "materials",
-    "id:theme:nonlinear-geophysics-machine-learning-informatics": "nonlinear",
-}
+    # Discipline groups. Labels are NEVER retyped here -- they are read from the graph,
+    # which carries them verbatim from the source spreadsheet, so an abbreviation can
+    # never creep in. This map only assigns each group a short key, used to pick its
+    # colour in CSS.
+    THEME_KEYS = {
+        "id:theme:atmospheric-science-space-weather": "atmos",
+        "id:theme:ocean-science-hydrology-cryosphere": "ocean",
+        "id:theme:global-environmental-change-paleoceanography-and-paleoclimatology-biogeoscience": "biosphere",
+        "id:theme:earth-s-interior-geodesy": "interior",
+        "id:theme:earth-surface-natural-hazards-geology-near-surface-geophysics": "surface",
+        "id:theme:geohealth-society-education": "society",
+        "id:theme:space-and-planetary-science": "space",
+        "id:theme:earth-planetary-materials": "materials",
+        "id:theme:nonlinear-geophysics-machine-learning-informatics": "nonlinear",
+    }
 
-# Groups that are part of the AGU vocabulary but that no nomination has used yet.
-# They belong in the published DefinedTermSet so the taxonomy is complete; the page
-# simply has no shelf to draw for them until a dataset arrives.
-EXTRA_THEMES = [
-    ("id:theme:nonlinear-geophysics-machine-learning-informatics",
-     "Nonlinear Geophysics, Machine Learning, Informatics", "nonlinear"),
-]
+    # Groups that are part of the AGU vocabulary but that no nomination has used yet.
+    # They belong in the published DefinedTermSet so the taxonomy is complete; the page
+    # simply has no shelf to draw for them until a dataset arrives.
+    EXTRA_THEMES = [
+        ("id:theme:nonlinear-geophysics-machine-learning-informatics",
+         "Nonlinear Geophysics, Machine Learning, Informatics", "nonlinear"),
+    ]
 
-# display order: the sequence the groups appear in on the page
-THEME_SEQUENCE = ["atmos", "ocean", "biosphere", "interior", "surface",
-                  "society", "space", "materials", "nonlinear"]
+    # display order: the sequence the groups appear in on the page
+    THEME_SEQUENCE = ["atmos", "ocean", "biosphere", "interior", "surface",
+                      "society", "space", "materials", "nonlinear"]
 
-_theme_nodes = {n["@id"]: n.get("prefLabel") for n in g if n.get("@type") == "skos:Concept"}
-unmapped = set(_theme_nodes) - set(THEME_KEYS)
-if unmapped:
-    raise SystemExit("discipline group(s) in the graph with no colour key assigned:\n  "
-                     + "\n  ".join(sorted(unmapped)))
+    _theme_nodes = {n["@id"]: n.get("prefLabel") for n in g if n.get("@type") == "skos:Concept"}
+    unmapped = set(_theme_nodes) - set(THEME_KEYS)
+    if unmapped:
+        raise SystemExit("discipline group(s) in the graph with no colour key assigned:\n  "
+                         + "\n  ".join(sorted(unmapped)))
 
-THEME_ORDER = [(tid, label, THEME_KEYS[tid]) for tid, label in _theme_nodes.items()]
-THEME_ORDER += [(tid, label, key) for tid, label, key in EXTRA_THEMES
-                if tid not in _theme_nodes]
-THEME_ORDER.sort(key=lambda r: THEME_SEQUENCE.index(r[2]))
-tkey = {t[0]: t[2] for t in THEME_ORDER}
-# verify every theme id resolves
-real = {n['@id'] for n in g if n.get('@type')=='skos:Concept'}
-missing = real - set(tkey)
-assert not missing, f"unmapped themes: {missing}"
+    THEME_ORDER = [(tid, label, THEME_KEYS[tid]) for tid, label in _theme_nodes.items()]
+    THEME_ORDER += [(tid, label, key) for tid, label, key in EXTRA_THEMES
+                    if tid not in _theme_nodes]
+    THEME_ORDER.sort(key=lambda r: THEME_SEQUENCE.index(r[2]))
+    tkey = {t[0]: t[2] for t in THEME_ORDER}
+    # verify every theme id resolves
+    real = {n['@id'] for n in g if n.get('@type')=='skos:Concept'}
+    missing = real - set(tkey)
+    assert not missing, f"unmapped themes: {missing}"
 
-nom_of = {}
-for n in g:
-    if 'agu:Nomination' in (n.get('@type') or []):
-        nom_of[n['nominates']] = n
+    nom_of = {}
+    for n in g:
+        if 'agu:Nomination' in (n.get('@type') or []):
+            nom_of[n['nominates']] = n
 
-def txt(v, cap=None):
-    if v is None: return None
-    if isinstance(v, list):
-        v = " ".join(txt(x) or "" for x in v)
-    elif isinstance(v, dict):
-        v = v.get('schema:text') or v.get('name') or ""
-    v = str(v).replace('\r\n', '\n').replace('\r', '\n')
-    v = re.sub(r'[ \t]+', ' ', v)          # collapse runs of spaces
-    v = re.sub(r' *\n *', '\n', v)         # trim around line breaks
-    v = re.sub(r'\n{3,}', '\n\n', v).strip()
-    return (v[:cap].rsplit(' ', 1)[0] + '…') if cap and len(v) > cap else v
+    def txt(v, cap=None):
+        if v is None: return None
+        if isinstance(v, list):
+            v = " ".join(txt(x) or "" for x in v)
+        elif isinstance(v, dict):
+            v = v.get('schema:text') or v.get('name') or ""
+        v = str(v).replace('\r\n', '\n').replace('\r', '\n')
+        v = re.sub(r'[ \t]+', ' ', v)          # collapse runs of spaces
+        v = re.sub(r' *\n *', '\n', v)         # trim around line breaks
+        v = re.sub(r'\n{3,}', '\n\n', v).strip()
+        return (v[:cap].rsplit(' ', 1)[0] + '…') if cap and len(v) > cap else v
 
-out = []
-for x in g:
-    if 'dcat:Dataset' not in (x.get('@type') or []): continue
-    nm = nom_of.get(x['@id'], {})
-    # "Short description of how you interact with this dataset", one statement per
-    # nominator, carrying the same Nominator N: key as the justification blocks.
-    inter = {}
-    for s in (nm.get('interactionStatement') or []):
-        v = txt(s.get('schema:text'))
-        if v:
-            inter[str(s.get('sequence') or '')] = v
-
-    # The nominator list is ordered by those same keys, so recover the key for each
-    # person from the statements rather than assuming a plain 1..n numbering -- some
-    # rows label their nominators 1a, 1b, 1c.
-    stmt_keys = {str(s.get('sequence')) for s in (nm.get('justification') or [])
-                 if s.get('sequence') is not None}
-    stmt_keys |= {k for k in inter}
-    ordered = sorted(stmt_keys, key=lambda k: (int(re.match(r'\d+', k).group()) if re.match(r'\d+', k) else 0,
-                                               re.sub(r'^\d+', '', k)))
-
-    # Only attribute a statement to an individual when the labels line up exactly.
-    # Four rows write one combined statement for a group of nominators; guessing by
-    # position there would put words in the wrong person's mouth.
-    roster = nm.get('nominator') or []
-    aligned = len(ordered) == len(roster)
-
-    people = []
-    for i, pid in enumerate(roster):
-        p = by.get(pid, {})
-        affs = [by[a]['name'] for a in (p.get('affiliation') or []) if a in by]
-        key = ordered[i] if aligned else str(i + 1)
-        people.append({"seq": key, "name": p.get('name'),
-                       "orcid": pid if pid.startswith('http') else None,
-                       "affil": affs[0] if affs else None,
-                       "interaction": inter.get(key) if aligned else None})
-    just = []
-    for j in (nm.get('justification') or []):
-        dims = [{"label": dd.get('prefLabel'), "text": txt(dd.get('schema:text'))}
-                for dd in (j.get('impactDimension') or [])]
-        just.append({"seq": j.get('sequence'), "text": txt(j.get('schema:text')), "dims": dims})
-    lp = x.get('landingPage') or []
-    doi = next((u for u in lp if 'doi.org/' in u), None)
-    repos = [by[r] for r in (x.get('inCatalog') or []) if r in by]
-    refs = [txt(r.get('schema:citation')) for r in (x.get('isReferencedBy') or [])]
-    reuse = [txt(r.get('schema:text')) for r in (x.get('reuseExample') or [])]
-    out.append({
-        "title": x.get('title'),
-        # a nomination can name more than one group; keep all of them
-        "themes": [tkey[tid] for tid in (x.get('theme') or []) if tid in tkey],
-        "nomCount": len(people),
-        "nominators": people,
-        "doi": doi,
-        "links": [u for u in lp if u != doi],
-        "repo": repos[0].get('name') if repos else None,
-        "repoIds": (repos[0].get('identifier') if repos else None) or [],
-        "creators": [c.get('name') for c in (x.get('creator') or [])],
-        "curators": [c.get('name') for c in (x.get('curator') or [])],
-        "desc": txt(x.get('description')),
-        "just": just,
-        "refs": refs,
-        "reuse": reuse,
-        "reuseTotal": len(x.get('reuseExample') or []),
-        "refsTotal": len(x.get('isReferencedBy') or []),
-    })
-
-out.sort(key=lambda r: (-r['nomCount'], r['title'].lower()))
-
-# ---------------------------------------------------------------- permanent ids ----
-# URLs must survive edits, re-ordering and re-runs, so ids are MINTED ONCE and then
-# frozen. Every build reads the ids already published in the data file and reuses
-# them; only genuinely new datasets get a new number, taken from one past the highest
-# ever issued. Ids are never re-used, even if a dataset is withdrawn.
-DATA_PATH = args.outdir / "data" / args.data_file
-DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-
-def stable_key(rec):
-    # Identity of a nomination record, not of the underlying data: three separate
-    # nominations can share one DOI (OCO-2/-3 does), and each still needs its own
-    # page and its own URL. DOI plus title is therefore the key.
-    title = re.sub(r"\s+", " ", (rec.get("title") or "")).strip().lower()
-    if rec.get("doi"):
-        return "doi:" + rec["doi"].replace("https://doi.org/", "").lower() + "|" + title
-    return "title:" + title
-
-
-def published_key(item):
-    """The stable key of an already-published record.
-
-    Read from its PropertyValue identifier where present. Older files stored it as
-    agu:stableKey, and older still not at all, so fall back to recomputing it from
-    the DOI and title -- both of which are in the record either way.
-    """
-    for ident in (item.get("identifier") or []):
-        if isinstance(ident, dict) and ident.get("propertyID") == "AGU-Impactful-Datasets-ID-StableKey":
-            v = ident.get("value")
+    out = []
+    for x in g:
+        if 'dcat:Dataset' not in (x.get('@type') or []): continue
+        nm = nom_of.get(x['@id'], {})
+        # "Short description of how you interact with this dataset", one statement per
+        # nominator, carrying the same Nominator N: key as the justification blocks.
+        inter = {}
+        for s in (nm.get('interactionStatement') or []):
+            v = txt(s.get('schema:text'))
             if v:
-                return v
-    if item.get("agu:stableKey"):
-        return item["agu:stableKey"]
-    doi = ""
-    for ident in (item.get("identifier") or []):
-        if isinstance(ident, dict) and ident.get("propertyID") == "DOI":
-            doi = str(ident.get("value") or "")
-            break
-    if not doi:
-        url = str(item.get("url") or "")
-        if "doi.org/" in url:
-            doi = url
-    title = re.sub(r"\s+", " ", str(item.get("name") or "")).strip().lower()
-    if doi:
-        return "doi:" + doi.replace("https://doi.org/", "").lower() + "|" + title
-    return "title:" + title
+                inter[str(s.get('sequence') or '')] = v
+
+        # The nominator list is ordered by those same keys, so recover the key for each
+        # person from the statements rather than assuming a plain 1..n numbering -- some
+        # rows label their nominators 1a, 1b, 1c.
+        stmt_keys = {str(s.get('sequence')) for s in (nm.get('justification') or [])
+                     if s.get('sequence') is not None}
+        stmt_keys |= {k for k in inter}
+        ordered = sorted(stmt_keys, key=lambda k: (int(re.match(r'\d+', k).group()) if re.match(r'\d+', k) else 0,
+                                                   re.sub(r'^\d+', '', k)))
+
+        # Only attribute a statement to an individual when the labels line up exactly.
+        # Four rows write one combined statement for a group of nominators; guessing by
+        # position there would put words in the wrong person's mouth.
+        roster = nm.get('nominator') or []
+        aligned = len(ordered) == len(roster)
+
+        people = []
+        for i, pid in enumerate(roster):
+            p = by.get(pid, {})
+            affs = [by[a]['name'] for a in (p.get('affiliation') or []) if a in by]
+            key = ordered[i] if aligned else str(i + 1)
+            people.append({"seq": key, "name": p.get('name'),
+                           "orcid": pid if pid.startswith('http') else None,
+                           "affil": affs[0] if affs else None,
+                           "interaction": inter.get(key) if aligned else None})
+        just = []
+        for j in (nm.get('justification') or []):
+            dims = [{"label": dd.get('prefLabel'), "text": txt(dd.get('schema:text'))}
+                    for dd in (j.get('impactDimension') or [])]
+            just.append({"seq": j.get('sequence'), "text": txt(j.get('schema:text')), "dims": dims})
+        lp = x.get('landingPage') or []
+        doi = next((u for u in lp if 'doi.org/' in u), None)
+        repos = [by[r] for r in (x.get('inCatalog') or []) if r in by]
+        refs = [txt(r.get('schema:citation')) for r in (x.get('isReferencedBy') or [])]
+        reuse = [txt(r.get('schema:text')) for r in (x.get('reuseExample') or [])]
+        out.append({
+            "title": x.get('title'),
+            # a nomination can name more than one group; keep all of them
+            "themes": [tkey[tid] for tid in (x.get('theme') or []) if tid in tkey],
+            "nomCount": len(people),
+            "nominators": people,
+            "doi": doi,
+            "links": [u for u in lp if u != doi],
+            "repo": repos[0].get('name') if repos else None,
+            "repoIds": (repos[0].get('identifier') if repos else None) or [],
+            "creators": [c.get('name') for c in (x.get('creator') or [])],
+            "curators": [c.get('name') for c in (x.get('curator') or [])],
+            "desc": txt(x.get('description')),
+            "just": just,
+            "refs": refs,
+            "reuse": reuse,
+            "reuseTotal": len(x.get('reuseExample') or []),
+            "refsTotal": len(x.get('isReferencedBy') or []),
+        })
+
+    out.sort(key=lambda r: (-r['nomCount'], r['title'].lower()))
+
+    # ---------------------------------------------------------------- permanent ids ----
+    # URLs must survive edits, re-ordering and re-runs, so ids are MINTED ONCE and then
+    # frozen. Every build reads the ids already published in the data file and reuses
+    # them; only genuinely new datasets get a new number, taken from one past the highest
+    # ever issued. Ids are never re-used, even if a dataset is withdrawn.
+    DATA_PATH = args.outdir / "data" / args.data_file
+    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
-known, highest = {}, 0
-if DATA_PATH.exists():
-    try:
-        prev = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-        # The published file is a flat @graph; older ones nested datasets under a
-        # "dataset" key. Read both, or a format change silently reissues every id.
-        prev_items = [n for n in prev.get("@graph", []) if n.get("@type") == "Dataset"]
-        prev_items += [n for n in prev.get("dataset", []) if isinstance(n, dict)]
-        for item in prev_items:
-            pid = None
-            for ident in (item.get("identifier") or []):
-                if isinstance(ident, dict) and ident.get("propertyID") == "AGU-Impactful-Datasets-ID":
-                    pid = ident.get("value")
-                    break
-            if not pid:
-                continue
-            highest = max(highest, int(re.sub(r"\D", "", pid) or 0))
-            # honour a stored key if an older file has one, else derive it
-            known[published_key(item)] = pid
-    except Exception as e:                      # a corrupt file must not silently remint
-        raise SystemExit("could not read existing ids from %s: %s" % (DATA_PATH, e))
-    if not known:
-        raise SystemExit(
-            "%s exists but no ids could be read from it. Refusing to continue: a "
-            "rebuild would reissue every id and break every published URL. Check "
-            "the file's shape before re-running." % DATA_PATH)
+    def stable_key(rec):
+        # Identity of a nomination record, not of the underlying data: three separate
+        # nominations can share one DOI (OCO-2/-3 does), and each still needs its own
+        # page and its own URL. DOI plus title is therefore the key.
+        title = re.sub(r"\s+", " ", (rec.get("title") or "")).strip().lower()
+        if rec.get("doi"):
+            return "doi:" + rec["doi"].replace("https://doi.org/", "").lower() + "|" + title
+        return "title:" + title
 
-# Collisions would silently point two pages at one URL, so fail loudly instead.
-seen_keys = collections.Counter(stable_key(r) for r in out)
-clashes = [k for k, n in seen_keys.items() if n > 1]
-if clashes:
-    raise SystemExit("identical stable keys for %d record(s); ids would collide:\n  %s"
-                     % (len(clashes), "\n  ".join(clashes[:5])))
 
-minted = 0
-for rec in out:
-    key = stable_key(rec)
-    if key in known:
-        rec["id"] = known[key]
+    def published_key(item):
+        """The stable key of an already-published record.
+
+        Read from its PropertyValue identifier where present. Older files stored it as
+        agu:stableKey, and older still not at all, so fall back to recomputing it from
+        the DOI and title -- both of which are in the record either way.
+        """
+        for ident in (item.get("identifier") or []):
+            if isinstance(ident, dict) and ident.get("propertyID") == "AGU-Impactful-Datasets-ID-StableKey":
+                v = ident.get("value")
+                if v:
+                    return v
+        if item.get("agu:stableKey"):
+            return item["agu:stableKey"]
+        doi = ""
+        for ident in (item.get("identifier") or []):
+            if isinstance(ident, dict) and ident.get("propertyID") == "DOI":
+                doi = str(ident.get("value") or "")
+                break
+        if not doi:
+            url = str(item.get("url") or "")
+            if "doi.org/" in url:
+                doi = url
+        title = re.sub(r"\s+", " ", str(item.get("name") or "")).strip().lower()
+        if doi:
+            return "doi:" + doi.replace("https://doi.org/", "").lower() + "|" + title
+        return "title:" + title
+
+
+    known, highest = {}, 0
+    if DATA_PATH.exists():
+        try:
+            prev = json.loads(DATA_PATH.read_text(encoding="utf-8"))
+            # The published file is a flat @graph; older ones nested datasets under a
+            # "dataset" key. Read both, or a format change silently reissues every id.
+            prev_items = [n for n in prev.get("@graph", []) if n.get("@type") == "Dataset"]
+            prev_items += [n for n in prev.get("dataset", []) if isinstance(n, dict)]
+            for item in prev_items:
+                pid = None
+                for ident in (item.get("identifier") or []):
+                    if isinstance(ident, dict) and ident.get("propertyID") == "AGU-Impactful-Datasets-ID":
+                        pid = ident.get("value")
+                        break
+                if not pid:
+                    continue
+                highest = max(highest, int(re.sub(r"\D", "", pid) or 0))
+                # honour a stored key if an older file has one, else derive it
+                known[published_key(item)] = pid
+        except Exception as e:                      # a corrupt file must not silently remint
+            raise SystemExit("could not read existing ids from %s: %s" % (DATA_PATH, e))
+        if not known:
+            raise SystemExit(
+                "%s exists but no ids could be read from it. Refusing to continue: a "
+                "rebuild would reissue every id and break every published URL. Check "
+                "the file's shape before re-running." % DATA_PATH)
+
+    # Collisions would silently point two pages at one URL, so fail loudly instead.
+    seen_keys = collections.Counter(stable_key(r) for r in out)
+    clashes = [k for k, n in seen_keys.items() if n > 1]
+    if clashes:
+        raise SystemExit("identical stable keys for %d record(s); ids would collide:\n  %s"
+                         % (len(clashes), "\n  ".join(clashes[:5])))
+
+    minted = 0
+    for rec in out:
+        key = stable_key(rec)
+        if key in known:
+            rec["id"] = known[key]
+        else:
+            highest += 1
+            minted += 1
+            rec["id"] = "agu-%04d" % highest
+            known[key] = rec["id"]
+        rec["stableKey"] = key
+
+    payload = {"themes": [{"key": k, "label": l} for _, l, k in THEME_ORDER], "datasets": out}
+
+    # ------------------------------------------------- public schema.org data file ----
+    # One file, fetched by the site and re-usable by anyone else at the same URL.
+    # schema.org core terms carry the bibliographic fields; nomination-specific content
+    # sits under an "agu:" prefix so the document stays valid JSON-LD.
+    THEME_LABELS = {k: l for _, l, k in THEME_ORDER}
+    BASE = args.base_url if args.base_url.endswith("/") else args.base_url + "/"
+
+    # AGU term and identifier namespaces. URNs are location-independent, so the
+    # identifiers stay valid if the site ever moves; the resolvable web address is
+    # carried separately on mainEntityOfPage.
+    NS_URN = "urn:org:agu:data:ns:"
+    THEME_SET_ID = "urn:org:agu:data:impactful-datasets:id:scheme:discipline-groups"
+
+
+    def theme_id(key):
+        return "urn:org:agu:data:impactful-datasets:id:theme:" + key
+
+
+
+    # ---------------------------------------------------------- party typing ----
+    # Whether a credited party is a Person, an Organization or an agu:ResponsibleParty
+    # is decided here, from the reviewed worksheet. The rules, in order:
+    #   * an ORCID means a person, full stop
+    #   * otherwise the worksheet decides: a high-confidence organisation becomes an
+    #     Organization; a medium-confidence one becomes a ResponsibleParty, because
+    #     the evidence does not justify the stronger claim; a low-confidence one stays
+    #     a Person; everything else -- uncertain, unparsed, or several entities in one
+    #     string -- becomes a ResponsibleParty
+    #   * a name absent from the worksheet and lacking an ORCID becomes a
+    #     ResponsibleParty: without an identifier there is nothing to support the
+    #     stronger claim that it names an individual
+    # A filled-in DECISION cell overrides all of it, so the worksheet stays the place
+    # where a human ruling is recorded.
+    # The rules live in party_typing.py, shared with prepare_cleanup.py. Two copies
+    # would drift, and the worksheet would stop describing the build it explains.
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from party_typing import (PARTY_RULES, PARTY_KIND, classify,  # noqa: E402
+                              confidence_of, load_review, reason_of)
+
+    REVIEW = load_review(args.responsible_party)
+    if REVIEW:
+        print("party types: read %d reviewed names from %s" % (len(REVIEW), args.responsible_party))
     else:
-        highest += 1
-        minted += 1
-        rec["id"] = "agu-%04d" % highest
-        known[key] = rec["id"]
-    rec["stableKey"] = key
+        print("party types: no review file at %s; every reviewer decision is ignored "
+              "and names without an ORCID default to agu:ResponsibleParty"
+              % args.responsible_party)
 
-payload = {"themes": [{"key": k, "label": l} for _, l, k in THEME_ORDER], "datasets": out}
-
-# ------------------------------------------------- public schema.org data file ----
-# One file, fetched by the site and re-usable by anyone else at the same URL.
-# schema.org core terms carry the bibliographic fields; nomination-specific content
-# sits under an "agu:" prefix so the document stays valid JSON-LD.
-THEME_LABELS = {k: l for _, l, k in THEME_ORDER}
-BASE = args.base_url if args.base_url.endswith("/") else args.base_url + "/"
-
-# AGU term and identifier namespaces. URNs are location-independent, so the
-# identifiers stay valid if the site ever moves; the resolvable web address is
-# carried separately on mainEntityOfPage.
-NS_URN = "urn:org:agu:data:ns:"
-THEME_SET_ID = "urn:org:agu:data:impactful-datasets:id:scheme:discipline-groups"
+    party_tally = collections.Counter()
 
 
-def theme_id(key):
-    return "urn:org:agu:data:impactful-datasets:id:theme:" + key
+    PARTY_LOG = []
 
 
+    def party(name, orcid=None, is_nominator=False, role="creator", dataset=None):
+        """A credited party as a typed node.
 
-# ---------------------------------------------------------- party typing ----
-# Whether a credited party is a Person, an Organization or an agu:ResponsibleParty
-# is decided here, from the reviewed worksheet. The rules, in order:
-#   * an ORCID means a person, full stop
-#   * otherwise the worksheet decides: a high-confidence organisation becomes an
-#     Organization; a medium-confidence one becomes a ResponsibleParty, because
-#     the evidence does not justify the stronger claim; a low-confidence one stays
-#     a Person; everything else -- uncertain, unparsed, or several entities in one
-#     string -- becomes a ResponsibleParty
-#   * a name absent from the worksheet and lacking an ORCID becomes a
-#     ResponsibleParty: without an identifier there is nothing to support the
-#     stronger claim that it names an individual
-# A filled-in DECISION cell overrides all of it, so the worksheet stays the place
-# where a human ruling is recorded.
-KEEP_AS_PERSON = {"Jing Gao ( jinggao@udel.edu )"}
-REVIEW = {}
-if args.person_review and args.person_review.exists():
-    import csv as _csv
-    with open(args.person_review, encoding="utf-8-sig") as fh:
-        for row in _csv.DictReader(fh):
-            REVIEW[row["name"]] = row
-    print("party types: read %d reviewed names from %s" % (len(REVIEW), args.person_review))
-else:
-    print("party types: no review file at %s; names without an ORCID default to "
-          "agu:ResponsibleParty" % args.person_review)
+        `is_nominator` marks the agent of an EndorseAction. The nomination form asks
+        for one person's name, email, ORCID and affiliation, so that agent is a
+        person by construction; a missing ORCID means only that they did not supply
+        one. Without it, six named researchers who left the field blank would be
+        demoted to ResponsibleParty.
+        """
+        kind, rule = classify(name, orcid, is_nominator, REVIEW)
+        row = REVIEW.get(name)
 
-PARTY_KIND = {"Person": "person", "Organization": "organization",
-              "agu:ResponsibleParty": "party"}
-party_tally = collections.Counter()
+        party_tally[kind] += 1
+        node = {"@type": kind, "@id": orcid or urn(PARTY_KIND[kind], name), "name": name}
+        PARTY_LOG.append({"name": name, "type": kind, "rule": rule, "role": role,
+                          "dataset": dataset, "id": node["@id"],
+                          "orcid": orcid or "",
+                          "worksheet_action": (row or {}).get("suggested_action", ""),
+                          "worksheet_kind": (row or {}).get("suggested_kind", ""),
+                          "worksheet_evidence": (row or {}).get("evidence", "")})
+        return node
 
 
-# Every branch below is a numbered rule. The same number appears in the `rule`
-# column of party_report.csv, so a row in the report can be traced to the line
-# that produced it. `confidence` is confidence in the assertion actually made,
-# not in how specific it is: calling an unparsed sentence a ResponsibleParty is
-# low confidence, while calling it *something* responsible is trivially true.
-PARTY_RULES = {
-    "R1":  ("ORCID supplied", "high"),
-    "R2":  ("agent of an EndorseAction; the form collects one person", "medium"),
-    "R3":  ("DECISION cell filled in by a reviewer", "high"),
-    "R4":  ("named exception, reviewed by hand", "high"),
-    "R5":  ("worksheet: organisation, high confidence", "high"),
-    "R6":  ("worksheet: organisation, medium confidence -- not enough to claim Organization", "medium"),
-    "R7":  ("worksheet: organisation, low confidence -- left as Person", "low"),
-    "R8":  ("worksheet: uncertain", "low"),
-    "R9":  ("worksheet: not an entity; needs re-parsing upstream", "low"),
-    "R10": ("worksheet: several entities in one string; needs splitting", "medium"),
-    "R11": ("no ORCID, not reviewed; nothing supports a narrower type", "low"),
-}
-PARTY_LOG = []
+    def urn(kind, local):
+        """urn:org:agu:data:impactful-datasets:id:{type}:{local}"""
+        s = re.sub(r"[^a-z0-9]+", "-", (local or "").lower()).strip("-")[:70].strip("-")
+        return ID_URN + kind + ":" + (s or "unknown")
+
+    ID_URN = "urn:org:agu:data:impactful-datasets:id:"
 
 
-def party(name, orcid=None, is_nominator=False, role="creator", dataset=None):
-    """A credited party as a typed node, classified by the rules above.
+    def sd_dataset(rec):
+        d = {
+            "@type": "Dataset",
+            "@id": ID_URN + "dataset:" + rec["id"],
+            # where this record is actually readable on the web
+            "mainEntityOfPage": BASE + "#/dataset/" + rec["id"],
+            "identifier": [
+                {"@type": "PropertyValue", "propertyID": "AGU-Impactful-Datasets-ID",
+                 "value": rec["id"]},
+                # The key this record is matched on when ids are reissued: DOI plus
+                # title. Published so a rebuild can recover the mapping from the file
+                # itself rather than from a side channel.
+                {"@type": "PropertyValue", "propertyID": "AGU-Impactful-Datasets-ID-StableKey",
+                 "value": rec["stableKey"]},
+            ],
+            "name": rec["title"],
+            # ------------------------------------------------------------------
+            # PLACEHOLDER, intentionally empty. This is the short display name used
+            # on the book spines on the home page. schema.org/alternateName is the
+            # right field: it is the standard term for an additional, alternative
+            # name for the same thing, and (unlike "name") it may repeat and may be
+            # shorter or longer. Fill it in per dataset -- roughly 24 characters or
+            # fewer is what a spine can show. The site falls back to "name" while
+            # this is empty, so nothing breaks until it is populated.
+            # ------------------------------------------------------------------
+            "alternateName": "",
+            # schema.org's keywords accepts a DefinedTerm, so each discipline is a
+            # reference to a term rather than a repeated free-text label. A nomination
+            # can name more than one group, so this is always a list.
+            "keywords": [{"@id": theme_id(k)} for k in rec["themes"]],
+        }
+        if rec.get("desc"):
+            d["description"] = rec["desc"]
+        if rec.get("doi"):
+            d["url"] = rec["doi"]
+            d["identifier"].append({"@type": "PropertyValue", "propertyID": "DOI",
+                                    "value": rec["doi"]})
+        elif rec.get("links"):
+            d["url"] = rec["links"][0]
+        extra = [u for u in (rec.get("links") or []) if u != d.get("url")]
+        if extra:
+            d["sameAs"] = extra
+        # A nominator often also produced or stewards the dataset they put forward.
+        # Where the credited name matches a nominator of this same dataset who gave an
+        # ORCID, reuse that ORCID: it is one human, and should be one node. The match
+        # is deliberately confined to the same record -- an exact name match across
+        # the collection would be far weaker evidence, and names like "Yuan Li" recur.
+        orcid_here = {p["name"]: p["orcid"] for p in rec["nominators"]
+                      if p.get("name") and p.get("orcid")}
+        if rec.get("creators"):
+            d["creator"] = [party(n, orcid_here.get(n), role="creator", dataset=rec["title"])
+                            for n in rec["creators"] if n]
+        if rec.get("curators"):
+            # key stays agu:curator; the @context maps it to schema.org/maintainer
+            d["agu:curator"] = [party(n, orcid_here.get(n), role="curator", dataset=rec["title"])
+                                for n in rec["curators"] if n]
+        if rec.get("repo"):
+            d["includedInDataCatalog"] = {"@type": "DataCatalog",
+                                          "@id": urn("organization", rec["repo"]),
+                                          "name": rec["repo"]}
+        if rec.get("refs"):
+            d["citation"] = [{"@type": "CreativeWork", "text": c} for c in rec["refs"]]
+        if rec.get("reuse"):
+            # key stays agu:reuseExample; the @context maps it to schema.org/subjectOf
+            d["agu:reuseExample"] = [{"@type": "CreativeWork", "text": c} for c in rec["reuse"]]
+        return d
 
-    `is_nominator` marks the agent of an EndorseAction. The nomination form asks
-    for one person's name, email, ORCID and affiliation, so that agent is a
-    person by construction; a missing ORCID means only that they did not supply
-    one. Without this, six named researchers who left the field blank would be
-    demoted to ResponsibleParty. The classifier still gets a veto, in case a
-    future export puts an institution in that field -- it flags none of the
-    current 161.
-    """
-    row = REVIEW.get(name)
-    decided = (row or {}).get("DECISION", "").strip()
 
-    if orcid:                                                        # RULE R1
-        kind, rule = "Person", "R1"
-    elif is_nominator and not row:                                   # RULE R2
-        kind, rule = "Person", "R2"
-    elif decided:                                                    # RULE R3
-        kind = {"person": "Person", "organization": "Organization",
-                "responsibleparty": "agu:ResponsibleParty"}.get(
-                    decided.lower().replace(" ", ""), "agu:ResponsibleParty")
-        rule = "R3"
-    elif name in KEEP_AS_PERSON:                                     # RULE R4
-        kind, rule = "Person", "R4"
-    elif row and row.get("suggested_action") == "Organization":
-        conf = row.get("confidence", "")
-        kind, rule = {                                               # RULES R5-R7
-            "high":   ("Organization", "R5"),
-            "medium": ("agu:ResponsibleParty", "R6"),
-            "low":    ("Person", "R7"),
-        }.get(conf, ("agu:ResponsibleParty", "R6"))
-    elif row and row.get("suggested_action") == "review":            # RULE R8
-        kind, rule = "agu:ResponsibleParty", "R8"
-    elif row and row.get("suggested_action") == "re-parse or drop":  # RULE R9
-        kind, rule = "agu:ResponsibleParty", "R9"
-    elif row and row.get("suggested_action") == "split first":       # RULE R10
-        kind, rule = "agu:ResponsibleParty", "R10"
-    else:                                                            # RULE R11
-        kind, rule = "agu:ResponsibleParty", "R11"
+    def sd_endorsements(rec):
+        """One EndorseAction per nominator, wrapped in an ordered ItemList.
 
-    party_tally[kind] += 1
-    node = {"@type": kind, "@id": orcid or urn(PARTY_KIND[kind], name), "name": name}
-    PARTY_LOG.append({"name": name, "type": kind, "rule": rule, "role": role,
-                      "dataset": dataset, "id": node["@id"],
-                      "orcid": orcid or "",
-                      "worksheet_action": (row or {}).get("suggested_action", ""),
-                      "worksheet_kind": (row or {}).get("suggested_kind", ""),
-                      "worksheet_evidence": (row or {}).get("evidence", "")})
-    return node
+        A nomination is an endorsement: a person vouching for a dataset. Modelling it
+        as schema.org/EndorseAction collapses three things that used to be separate
+        custom properties -- the nominator, their justification and their description
+        of how they use the data -- into the single event they actually describe.
+
+        schema.org has no property linking a Thing to actions already performed on it
+        (potentialAction means the opposite), so the actions live as siblings in the
+        graph and point back with `object`. Order is carried by an ItemList whose
+        itemListElement is an @list, since a plain graph is unordered.
+        """
+        if not rec.get("nominators"):
+            return None
+        just = {str(j.get("seq")): j for j in (rec.get("just") or [])}
+        ds_id = ID_URN + "dataset:" + rec["id"]
+        actions = []
+        for n, p in enumerate(rec["nominators"], start=1):
+            j = just.get(str(p.get("seq")))
+            # a real ORCID beats a minted id, and is what marks the agent a Person
+            agent = party(p.get("name"), p.get("orcid"), is_nominator=True,
+                          role="nominator", dataset=rec["title"])
+            if p.get("affil"):
+                agent["affiliation"] = {"@type": "Organization",
+                                        "@id": urn("organization", p["affil"]),
+                                        "name": p["affil"]}
+            # The justification is what this endorsement produced, so it hangs off the
+            # action as `result`; its People/Planet/Prosperity tags become `about`,
+            # which retires agu:impactDimension.
+            result = None
+            if j and j.get("text"):
+                result = {"@type": "CreativeWork", "text": j["text"]}
+                if j.get("dims"):
+                    result["about"] = [{"@type": "DefinedTerm", "name": x["label"],
+                                        "description": x["text"]} for x in j["dims"]]
+            action = {k: v for k, v in {
+                "@type": "EndorseAction",
+                "@id": "%sendorsement:%s-%d" % (ID_URN, rec["id"], n),
+                # The form's own slot label ("1", "1a"): an identifier, not a ranking.
+                "identifier": ({"@type": "PropertyValue", "propertyID": "AGU-Nominator-Slot",
+                                "value": str(p["seq"])} if p.get("seq") is not None else None),
+                "agent": agent,
+                "object": {"@id": ds_id},
+                # This nominator's account of how they work with this dataset. It belongs
+                # on the action, not the agent: the same person can nominate several
+                # datasets, and agent nodes share an ORCID @id, so a description there
+                # would merge across datasets and become ambiguous.
+                "description": p.get("interaction"),
+                "result": result,
+            }.items() if v is not None}
+            actions.append(action)
+        return {
+            "@type": "ItemList",
+            "@id": ID_URN + "endorsements:" + rec["id"],
+            "name": "Nominations for " + (rec.get("title") or rec["id"]),
+            "itemListOrder": "https://schema.org/ItemListOrderAscending",
+            "numberOfItems": len(actions),
+            "itemListElement": actions,
+        }
 
 
-def urn(kind, local):
-    """urn:org:agu:data:impactful-datasets:id:{type}:{local}"""
-    s = re.sub(r"[^a-z0-9]+", "-", (local or "").lower()).strip("-")[:70].strip("-")
-    return ID_URN + kind + ":" + (s or "unknown")
+    catalog = {
+        "@type": "DataCatalog",
+        "@id": ID_URN + "collection:impactful-datasets",
+        "name": "Impactful Datasets in the Earth, Space, and Environmental Sciences",
+        "publisher": {"@type": "Organization", "name": "American Geophysical Union",
+                      "url": "https://www.agu.org/"},
+        # Who built the collection as a published thing -- the data model, the
+        # identifier scheme and the site. Recorded here so the attribution travels
+        # with the data rather than living only in a page footer.
+        "creator": {"@type": "Person",
+                    # identified the same way the nominators are: a real ORCID as the
+                    # @id, so the credit resolves and deduplicates against the wider
+                    # graph rather than being a bare string
+                    "@id": "https://orcid.org/0000-0003-4486-9448",
+                    "name": "Adam Shepherd",
+                    "email": "adam@harborlight.tech",
+                    "identifier": {"@type": "PropertyValue", "propertyID": "ORCID",
+                                   "value": "https://orcid.org/0000-0003-4486-9448"},
+                    "affiliation": {"@type": "Organization",
+                                    "name": "Harbor Light Technologies",
+                                    "url": "https://harborlight.tech"}},
+        "license": "https://creativecommons.org/licenses/by/4.0/",
+        "dateModified": __import__("datetime").date.today().isoformat(),
+        # display order of the collection, preserved as an @list (see @context)
+        "dataset": [{"@id": ID_URN + "dataset:" + r["id"]} for r in out],
+    }
 
-ID_URN = "urn:org:agu:data:impactful-datasets:id:"
-
-
-def sd_dataset(rec):
-    d = {
-        "@type": "Dataset",
-        "@id": ID_URN + "dataset:" + rec["id"],
-        # where this record is actually readable on the web
-        "mainEntityOfPage": BASE + "#/dataset/" + rec["id"],
-        "identifier": [
-            {"@type": "PropertyValue", "propertyID": "AGU-Impactful-Datasets-ID",
-             "value": rec["id"]},
-            # The key this record is matched on when ids are reissued: DOI plus
-            # title. Published so a rebuild can recover the mapping from the file
-            # itself rather than from a side channel.
-            {"@type": "PropertyValue", "propertyID": "AGU-Impactful-Datasets-ID-StableKey",
-             "value": rec["stableKey"]},
+    theme_set = {
+        "@type": "DefinedTermSet",
+        "@id": THEME_SET_ID,
+        "name": "AGU discipline groups",
+        "hasDefinedTerm": [
+            {"@type": "DefinedTerm",
+             "@id": theme_id(k),
+             "identifier": k,
+             "name": l,
+             "inDefinedTermSet": {"@id": THEME_SET_ID}}
+            for _, l, k in THEME_ORDER
         ],
-        "name": rec["title"],
-        # ------------------------------------------------------------------
-        # PLACEHOLDER, intentionally empty. This is the short display name used
-        # on the book spines on the home page. schema.org/alternateName is the
-        # right field: it is the standard term for an additional, alternative
-        # name for the same thing, and (unlike "name") it may repeat and may be
-        # shorter or longer. Fill it in per dataset -- roughly 24 characters or
-        # fewer is what a spine can show. The site falls back to "name" while
-        # this is empty, so nothing breaks until it is populated.
-        # ------------------------------------------------------------------
-        "alternateName": "",
-        # schema.org's keywords accepts a DefinedTerm, so each discipline is a
-        # reference to a term rather than a repeated free-text label. A nomination
-        # can name more than one group, so this is always a list.
-        "keywords": [{"@id": theme_id(k)} for k in rec["themes"]],
     }
-    if rec.get("desc"):
-        d["description"] = rec["desc"]
-    if rec.get("doi"):
-        d["url"] = rec["doi"]
-        d["identifier"].append({"@type": "PropertyValue", "propertyID": "DOI",
-                                "value": rec["doi"]})
-    elif rec.get("links"):
-        d["url"] = rec["links"][0]
-    extra = [u for u in (rec.get("links") or []) if u != d.get("url")]
-    if extra:
-        d["sameAs"] = extra
-    # A nominator often also produced or stewards the dataset they put forward.
-    # Where the credited name matches a nominator of this same dataset who gave an
-    # ORCID, reuse that ORCID: it is one human, and should be one node. The match
-    # is deliberately confined to the same record -- an exact name match across
-    # the collection would be far weaker evidence, and names like "Yuan Li" recur.
-    orcid_here = {p["name"]: p["orcid"] for p in rec["nominators"]
-                  if p.get("name") and p.get("orcid")}
-    if rec.get("creators"):
-        d["creator"] = [party(n, orcid_here.get(n), role="creator", dataset=rec["title"])
-                        for n in rec["creators"] if n]
-    if rec.get("curators"):
-        # key stays agu:curator; the @context maps it to schema.org/maintainer
-        d["agu:curator"] = [party(n, orcid_here.get(n), role="curator", dataset=rec["title"])
-                            for n in rec["curators"] if n]
-    if rec.get("repo"):
-        d["includedInDataCatalog"] = {"@type": "DataCatalog",
-                                      "@id": urn("organization", rec["repo"]),
-                                      "name": rec["repo"]}
-    if rec.get("refs"):
-        d["citation"] = [{"@type": "CreativeWork", "text": c} for c in rec["refs"]]
-    if rec.get("reuse"):
-        # key stays agu:reuseExample; the @context maps it to schema.org/subjectOf
-        d["agu:reuseExample"] = [{"@type": "CreativeWork", "text": c} for c in rec["reuse"]]
-    return d
+
+    # The two AGU-flavoured keys are documented as real vocabulary terms rather than
+    # with a comment inside their @context entry: JSON-LD 1.1 forbids anything but its
+    # own keywords in a term definition, and a strict processor rejects the whole
+    # document if one appears. Declared here, the definitions are ordinary triples that
+    # any consumer can read, and they state the schema.org term each one resolves to.
+    vocab = [
+        # A single type for whoever answers for a dataset, whether that is an
+        # individual, an institution, a standing team or a service desk. Declared a
+        # subclass of prov:Agent, which already means "something that bears
+        # responsibility for an activity", so consumers reasoning over PROV pick it
+        # up without AGU having to redefine anything.
+        #
+        # Note what is deliberately NOT asserted here: schema:Person and
+        # schema:Organization are left alone. Declaring them subclasses of this class
+        # would be a global claim -- every Person in every graph, anywhere, would
+        # become an AGU responsible party once the graphs were merged. Subsumption is
+        # stated only in the direction that is ours to state.
+        {"@id": NS_URN + "ResponsibleParty",
+         "@type": "owl:Class",
+         "rdfs:label": "Responsible Party",
+         "rdfs:comment": (
+             "A person or organization that has responsibility for a resource. Used "
+             "for the parties credited on a nomination \u2014 those who produced a "
+             "dataset and those who steward it \u2014 and, in particular, for parties "
+             "that cannot be resolved to either a person or an organization: standing "
+             "teams, science working groups, service desks and similar collective "
+             "bodies named in the nomination form. Typing such a party as "
+             "ResponsibleParty records what is actually known instead of guessing "
+             "between schema.org/Person and schema.org/Organization."),
+         "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
+         "rdfs:subClassOf": {"@id": "http://www.w3.org/ns/prov#Agent"},
+         # Pointers to the two schema.org classes a responsible party will usually
+         # turn out to be. narrowMatch, not closeMatch: this concept is the broader
+         # one -- it also covers the teams, working groups and service desks that are
+         # neither a person nor an organization. SKOS mapping relations are
+         # documentation, not logic: they carry no entailment, so unlike
+         # rdfs:subClassOf this says nothing about anybody else's data. A
+         # schema:Person in an unrelated graph is untouched by it.
+         "skos:narrowMatch": [{"@id": "https://schema.org/Person"},
+                              {"@id": "https://schema.org/Organization"}]},
+        {"@id": NS_URN + "curator",
+         "@type": "rdf:Property",
+         "rdfs:label": "curator",
+         "rdfs:comment": (
+             "The person, team or programme responsible for stewarding a nominated "
+             "dataset: preparing, documenting, quality-checking and maintaining it, and "
+             "answering for it over time. Recorded from the nomination form's "
+             "\u201cData curator(s)\u201d field, so it names whoever the nominator "
+             "credited, which may be an individual, a group or a service desk rather "
+             "than a single person. It does not imply authorship of the data. Declared "
+             "equivalent to schema.org/maintainer, whose definition \u2014 the party "
+             "that manages a dataset and responds to questions about it \u2014 matches "
+             "this sense."),
+         "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
+         "owl:equivalentProperty": {"@id": "https://schema.org/maintainer"}},
+        {"@id": NS_URN + "reuseExample",
+         "@type": "rdf:Property",
+         "rdfs:label": "reuse example",
+         "rdfs:comment": (
+             "A documented instance of the nominated dataset being used again beyond "
+             "its original purpose: a paper, derived product, operational system, "
+             "teaching resource or policy application that a nominator offered as "
+             "evidence of the dataset's reach. Each is free text as supplied, "
+             "sometimes with a DOI or URL, and is evidence of impact rather than a "
+             "formal citation record. Declared equivalent to schema.org/subjectOf, "
+             "since each example is a work about the dataset."),
+         "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
+         "owl:equivalentProperty": {"@id": "https://schema.org/subjectOf"}},
+    ]
+
+    # A flat graph: catalog, discipline vocabulary, datasets, and the endorsement lists
+    # as siblings. Endorsements point back at their dataset with `object`, which is how
+    # schema.org expects a performed action to relate to the thing acted on -- there is
+    # no property for hanging one off the Thing itself.
+    nodes = [catalog, theme_set] + vocab
+    nodes += [sd_dataset(r) for r in out]
+    nodes += [e for e in (sd_endorsements(r) for r in out) if e]
+
+    data_doc = {
+        "@context": {
+            "@vocab": "https://schema.org/",
+            "agu": NS_URN,
+            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "owl": "http://www.w3.org/2002/07/owl#",
+            "prov": "http://www.w3.org/ns/prov#",
+            "skos": "http://www.w3.org/2004/02/skos/core#",
+            # agu:curator and agu:reuseExample are deliberately NOT aliased here.
+            # JSON-LD 1.1 requires a term whose name is in compact-IRI form to expand
+            # to the same IRI its prefix would give, so mapping "agu:curator" to
+            # schema:maintainer in the context makes the whole document invalid and a
+            # conforming processor rejects it. The schema.org equivalence is stated
+            # instead on the property definitions in the graph, as a real triple.
+            # ordering is not implied by a graph, so the sequences that matter are
+            # declared as lists: the collection's display order, and the order of
+            # nominators within each dataset's endorsement list
+            "dataset": {"@id": "https://schema.org/dataset", "@container": "@list"},
+            "itemListElement": {"@id": "https://schema.org/itemListElement",
+                                "@container": "@list"},
+        },
+        "@graph": nodes,
+    }
+    DATA_PATH.write_text(json.dumps(data_doc, indent=2, ensure_ascii=False), encoding="utf-8")
+    # responsible_party.csv is written by prepare_cleanup.py in step 1, from the
+    # same shared rules. Writing it here too would change the file under a
+    # reviewer mid-review.
+
+    for _k, _n in party_tally.most_common():
+        print("party types: %-22s %4d" % (_k, _n))
+    print("data file: %s  (%d datasets, %d new id%s minted)"
+          % (DATA_PATH, len(out), minted, "" if minted == 1 else "s"))
+
+    if args.data_only:
+        # The JSON-LD is the deliverable for this step. The site is built from the
+        # same records in a later one, so stopping here keeps the two concerns in
+        # separate runs and separate commits.
+        raise SystemExit(0)
 
 
-def sd_endorsements(rec):
-    """One EndorseAction per nominator, wrapped in an ordered ItemList.
 
-    A nomination is an endorsement: a person vouching for a dataset. Modelling it
-    as schema.org/EndorseAction collapses three things that used to be separate
-    custom properties -- the nominator, their justification and their description
-    of how they use the data -- into the single event they actually describe.
 
-    schema.org has no property linking a Thing to actions already performed on it
-    (potentialAction means the opposite), so the actions live as siblings in the
-    graph and point back with `object`. Order is carried by an ItemList whose
-    itemListElement is an @list, since a plain graph is unordered.
-    """
-    if not rec.get("nominators"):
+    DATA = payload
+    DATA['featured'] = next((d['id'] for d in DATA['datasets'] if d['title'] == args.featured),
+                            DATA['datasets'][0]['id'])
+    DATA['nominatorCount'] = args.nominators
+
+else:
+    # The site needs remarkably little from Python: four counts for the page
+    # metadata and the id of the dataset to open cold. Everything a visitor
+    # reads is fetched from the data file by the browser. So these are derived
+    # from the published file rather than recomputed from the graph.
+    _doc = json.loads(Path(args.from_data).read_text(encoding='utf-8'))
+    _nodes = _doc.get('@graph', [])
+
+    def _typed(n, t):
+        v = n.get('@type')
+        return t in (v if isinstance(v, list) else [v])
+
+    _sets = [n for n in _nodes if _typed(n, 'DefinedTermSet')]
+    _terms = _sets[0].get('hasDefinedTerm', []) if _sets else []
+    _ds = [n for n in _nodes if _typed(n, 'Dataset')]
+
+    def _agu_id(node):
+        for i in (node.get('identifier') or []):
+            if isinstance(i, dict) and i.get('propertyID') == 'AGU-Impactful-Datasets-ID':
+                return i.get('value')
         return None
-    just = {str(j.get("seq")): j for j in (rec.get("just") or [])}
-    ds_id = ID_URN + "dataset:" + rec["id"]
-    actions = []
-    for n, p in enumerate(rec["nominators"], start=1):
-        j = just.get(str(p.get("seq")))
-        # a real ORCID beats a minted id, and is what marks the agent a Person
-        agent = party(p.get("name"), p.get("orcid"), is_nominator=True,
-                      role="nominator", dataset=rec["title"])
-        if p.get("affil"):
-            agent["affiliation"] = {"@type": "Organization",
-                                    "@id": urn("organization", p["affil"]),
-                                    "name": p["affil"]}
-        # The justification is what this endorsement produced, so it hangs off the
-        # action as `result`; its People/Planet/Prosperity tags become `about`,
-        # which retires agu:impactDimension.
-        result = None
-        if j and j.get("text"):
-            result = {"@type": "CreativeWork", "text": j["text"]}
-            if j.get("dims"):
-                result["about"] = [{"@type": "DefinedTerm", "name": x["label"],
-                                    "description": x["text"]} for x in j["dims"]]
-        action = {k: v for k, v in {
-            "@type": "EndorseAction",
-            "@id": "%sendorsement:%s-%d" % (ID_URN, rec["id"], n),
-            # The form's own slot label ("1", "1a"): an identifier, not a ranking.
-            "identifier": ({"@type": "PropertyValue", "propertyID": "AGU-Nominator-Slot",
-                            "value": str(p["seq"])} if p.get("seq") is not None else None),
-            "agent": agent,
-            "object": {"@id": ds_id},
-            # This nominator's account of how they work with this dataset. It belongs
-            # on the action, not the agent: the same person can nominate several
-            # datasets, and agent nodes share an ORCID @id, so a description there
-            # would merge across datasets and become ambiguous.
-            "description": p.get("interaction"),
-            "result": result,
-        }.items() if v is not None}
-        actions.append(action)
-    return {
-        "@type": "ItemList",
-        "@id": ID_URN + "endorsements:" + rec["id"],
-        "name": "Nominations for " + (rec.get("title") or rec["id"]),
-        "itemListOrder": "https://schema.org/ItemListOrderAscending",
-        "numberOfItems": len(actions),
-        "itemListElement": actions,
-    }
 
+    _people = set()
+    for _l in _nodes:
+        if not _typed(_l, 'ItemList'):
+            continue
+        for _a in (_l.get('itemListElement') or []):
+            _ag = _a.get('agent') or {}
+            _k = _ag.get('@id') or (_ag.get('name') or '').strip().lower()
+            if _k:
+                _people.add(_k)
 
-catalog = {
-    "@type": "DataCatalog",
-    "@id": ID_URN + "collection:impactful-datasets",
-    "name": "Impactful Datasets in the Earth, Space, and Environmental Sciences",
-    "publisher": {"@type": "Organization", "name": "American Geophysical Union",
-                  "url": "https://www.agu.org/"},
-    # Who built the collection as a published thing -- the data model, the
-    # identifier scheme and the site. Recorded here so the attribution travels
-    # with the data rather than living only in a page footer.
-    "creator": {"@type": "Person",
-                # identified the same way the nominators are: a real ORCID as the
-                # @id, so the credit resolves and deduplicates against the wider
-                # graph rather than being a bare string
-                "@id": "https://orcid.org/0000-0003-4486-9448",
-                "name": "Adam Shepherd",
-                "email": "adam@harborlight.tech",
-                "identifier": {"@type": "PropertyValue", "propertyID": "ORCID",
-                               "value": "https://orcid.org/0000-0003-4486-9448"},
-                "affiliation": {"@type": "Organization",
-                                "name": "Harbor Light Technologies",
-                                "url": "https://harborlight.tech"}},
-    "license": "https://creativecommons.org/licenses/by/4.0/",
-    "dateModified": __import__("datetime").date.today().isoformat(),
-    # display order of the collection, preserved as an @list (see @context)
-    "dataset": [{"@id": ID_URN + "dataset:" + r["id"]} for r in out],
-}
-
-theme_set = {
-    "@type": "DefinedTermSet",
-    "@id": THEME_SET_ID,
-    "name": "AGU discipline groups",
-    "hasDefinedTerm": [
-        {"@type": "DefinedTerm",
-         "@id": theme_id(k),
-         "identifier": k,
-         "name": l,
-         "inDefinedTermSet": {"@id": THEME_SET_ID}}
-        for _, l, k in THEME_ORDER
-    ],
-}
-
-# The two AGU-flavoured keys are documented as real vocabulary terms rather than
-# with a comment inside their @context entry: JSON-LD 1.1 forbids anything but its
-# own keywords in a term definition, and a strict processor rejects the whole
-# document if one appears. Declared here, the definitions are ordinary triples that
-# any consumer can read, and they state the schema.org term each one resolves to.
-vocab = [
-    # A single type for whoever answers for a dataset, whether that is an
-    # individual, an institution, a standing team or a service desk. Declared a
-    # subclass of prov:Agent, which already means "something that bears
-    # responsibility for an activity", so consumers reasoning over PROV pick it
-    # up without AGU having to redefine anything.
-    #
-    # Note what is deliberately NOT asserted here: schema:Person and
-    # schema:Organization are left alone. Declaring them subclasses of this class
-    # would be a global claim -- every Person in every graph, anywhere, would
-    # become an AGU responsible party once the graphs were merged. Subsumption is
-    # stated only in the direction that is ours to state.
-    {"@id": NS_URN + "ResponsibleParty",
-     "@type": "owl:Class",
-     "rdfs:label": "Responsible Party",
-     "rdfs:comment": (
-         "A person or organization that has responsibility for a resource. Used "
-         "for the parties credited on a nomination \u2014 those who produced a "
-         "dataset and those who steward it \u2014 and, in particular, for parties "
-         "that cannot be resolved to either a person or an organization: standing "
-         "teams, science working groups, service desks and similar collective "
-         "bodies named in the nomination form. Typing such a party as "
-         "ResponsibleParty records what is actually known instead of guessing "
-         "between schema.org/Person and schema.org/Organization."),
-     "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
-     "rdfs:subClassOf": {"@id": "http://www.w3.org/ns/prov#Agent"},
-     # Pointers to the two schema.org classes a responsible party will usually
-     # turn out to be. narrowMatch, not closeMatch: this concept is the broader
-     # one -- it also covers the teams, working groups and service desks that are
-     # neither a person nor an organization. SKOS mapping relations are
-     # documentation, not logic: they carry no entailment, so unlike
-     # rdfs:subClassOf this says nothing about anybody else's data. A
-     # schema:Person in an unrelated graph is untouched by it.
-     "skos:narrowMatch": [{"@id": "https://schema.org/Person"},
-                          {"@id": "https://schema.org/Organization"}]},
-    {"@id": NS_URN + "curator",
-     "@type": "rdf:Property",
-     "rdfs:label": "curator",
-     "rdfs:comment": (
-         "The person, team or programme responsible for stewarding a nominated "
-         "dataset: preparing, documenting, quality-checking and maintaining it, and "
-         "answering for it over time. Recorded from the nomination form's "
-         "\u201cData curator(s)\u201d field, so it names whoever the nominator "
-         "credited, which may be an individual, a group or a service desk rather "
-         "than a single person. It does not imply authorship of the data. Declared "
-         "equivalent to schema.org/maintainer, whose definition \u2014 the party "
-         "that manages a dataset and responds to questions about it \u2014 matches "
-         "this sense."),
-     "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
-     "owl:equivalentProperty": {"@id": "https://schema.org/maintainer"}},
-    {"@id": NS_URN + "reuseExample",
-     "@type": "rdf:Property",
-     "rdfs:label": "reuse example",
-     "rdfs:comment": (
-         "A documented instance of the nominated dataset being used again beyond "
-         "its original purpose: a paper, derived product, operational system, "
-         "teaching resource or policy application that a nominator offered as "
-         "evidence of the dataset's reach. Each is free text as supplied, "
-         "sometimes with a DOI or URL, and is evidence of impact rather than a "
-         "formal citation record. Declared equivalent to schema.org/subjectOf, "
-         "since each example is a work about the dataset."),
-     "rdfs:isDefinedBy": {"@id": NS_URN[:-1]},
-     "owl:equivalentProperty": {"@id": "https://schema.org/subjectOf"}},
-]
-
-# A flat graph: catalog, discipline vocabulary, datasets, and the endorsement lists
-# as siblings. Endorsements point back at their dataset with `object`, which is how
-# schema.org expects a performed action to relate to the thing acted on -- there is
-# no property for hanging one off the Thing itself.
-nodes = [catalog, theme_set] + vocab
-nodes += [sd_dataset(r) for r in out]
-nodes += [e for e in (sd_endorsements(r) for r in out) if e]
-
-data_doc = {
-    "@context": {
-        "@vocab": "https://schema.org/",
-        "agu": NS_URN,
-        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-        "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-        "owl": "http://www.w3.org/2002/07/owl#",
-        "prov": "http://www.w3.org/ns/prov#",
-        "skos": "http://www.w3.org/2004/02/skos/core#",
-        # agu:curator and agu:reuseExample are deliberately NOT aliased here.
-        # JSON-LD 1.1 requires a term whose name is in compact-IRI form to expand
-        # to the same IRI its prefix would give, so mapping "agu:curator" to
-        # schema:maintainer in the context makes the whole document invalid and a
-        # conforming processor rejects it. The schema.org equivalence is stated
-        # instead on the property definitions in the graph, as a real triple.
-        # ordering is not implied by a graph, so the sequences that matter are
-        # declared as lists: the collection's display order, and the order of
-        # nominators within each dataset's endorsement list
-        "dataset": {"@id": "https://schema.org/dataset", "@container": "@list"},
-        "itemListElement": {"@id": "https://schema.org/itemListElement",
-                            "@container": "@list"},
-    },
-    "@graph": nodes,
-}
-DATA_PATH.write_text(json.dumps(data_doc, indent=2, ensure_ascii=False), encoding="utf-8")
-# ------------------------------------------------- reviewable party report ----
-_by_party = {}
-for _e in PARTY_LOG:
-    _k = (_e["type"], _e["name"])
-    _r = _by_party.setdefault(_k, {"rules": set(), "roles": collections.Counter(),
-                                   "datasets": [], "id": _e["id"], "orcid": _e["orcid"],
-                                   "action": _e["worksheet_action"],
-                                   "kind": _e["worksheet_kind"],
-                                   "evidence": _e["worksheet_evidence"]})
-    _r["rules"].add(_e["rule"])
-    _r["roles"][_e["role"]] += 1
-    if _e["dataset"] and _e["dataset"] not in _r["datasets"]:
-        _r["datasets"].append(_e["dataset"])
-
-_ORDER = {"Person": 0, "Organization": 1, "agu:ResponsibleParty": 2}
-_CONF = {"high": 0, "medium": 1, "low": 2}
-_rows = []
-for (_type, _name), _r in _by_party.items():
-    _rules = sorted(_r["rules"])
-    _conf = min((PARTY_RULES[x][1] for x in _rules), key=lambda c: _CONF[c])
-    _rows.append({
-        "assigned_type": _type,
-        "name": _name,
-        "confidence": _conf,
-        "rule": ", ".join(_rules),
-        "why": " / ".join(PARTY_RULES[x][0] for x in _rules),
-        "roles": ", ".join("%s x%d" % (k, v) for k, v in sorted(_r["roles"].items())),
-        "occurrences": sum(_r["roles"].values()),
-        "orcid": _r["orcid"],
-        "node_id": _r["id"],
-        "worksheet_action": _r["action"],
-        "worksheet_kind": _r["kind"],
-        "worksheet_evidence": _r["evidence"],
-        "example_datasets": " | ".join(_r["datasets"][:3]),
-        "DECISION": "",
-    })
-_rows.sort(key=lambda r: (_ORDER[r["assigned_type"]], _CONF[r["confidence"]], r["name"].lower()))
-_report = args.outdir / "party_report.csv"
-with open(_report, "w", newline="", encoding="utf-8-sig") as _fh:
-    _w = csv.DictWriter(_fh, fieldnames=list(_rows[0].keys()))
-    _w.writeheader(); _w.writerows(_rows)
-print("party report: %s  (%d distinct parties)" % (_report, len(_rows)))
-
-for _k, _n in party_tally.most_common():
-    print("party types: %-22s %4d" % (_k, _n))
-print("data file: %s  (%d datasets, %d new id%s minted)"
-      % (DATA_PATH, len(out), minted, "" if minted == 1 else "s"))
-
-
-
-DATA = payload
-DATA['featured'] = next((d['id'] for d in DATA['datasets'] if d['title'] == args.featured),
-                        DATA['datasets'][0]['id'])
-DATA['nominatorCount'] = args.nominators
+    payload = {'themes': [{'key': t.get('identifier'), 'label': t.get('name')}
+                          for t in _terms],
+               'datasets': [{'id': _agu_id(n), 'title': n.get('name')} for n in _ds]}
+    out = payload['datasets']
+    DATA = payload
+    DATA['featured'] = next(
+        (x['id'] for x in out if x['title'] == args.featured),
+        out[0]['id'] if out else None)
+    DATA['nominatorCount'] = len(_people)
+    print('site source: %s (%d datasets, %d discipline groups, %d nominators)'
+          % (args.from_data, len(out), len(_terms), len(_people)))
 
 
 
@@ -2282,6 +2264,13 @@ SITE = args.outdir
 for sub in ("assets/css", "assets/js", "assets/img", "data"):
     (SITE / sub).mkdir(parents=True, exist_ok=True)
 
+if args.from_data:
+    # The page fetches this at load, so it has to ship beside the markup.
+    import shutil as _shutil
+    _dest = SITE / "data" / args.data_file
+    if Path(args.from_data).resolve() != _dest.resolve():
+        _shutil.copyfile(args.from_data, _dest)
+
 bundle = (HTML
           .replace("__DATA_URL__", args.data_url or ("data/" + args.data_file))
           .replace("__LOGO_URL__", "../img/agu-logo.png"))
@@ -2339,13 +2328,17 @@ body = re.sub(r"<script>.*?</script>", "", body, flags=re.S).replace("</body>\n<
 # Distinct nominators, counted here only for the page metadata. The figure the
 # visitor sees is computed in the browser from the same data file, so the two
 # cannot drift apart.
-_people = set()
-for _r in out:
-    for _p in _r["nominators"]:
-        _k = _p.get("orcid") or (_p.get("name") or "").strip().lower()
-        if _k:
-            _people.add(_k)
-NOMINATORS = len(_people)
+if args.from_data:
+    # already counted from the published file
+    NOMINATORS = DATA["nominatorCount"]
+else:
+    _people = set()
+    for _r in out:
+        for _p in _r["nominators"]:
+            _k = _p.get("orcid") or (_p.get("name") or "").strip().lower()
+            if _k:
+                _people.add(_k)
+    NOMINATORS = len(_people)
 
 
 # Fingerprint each asset so a rebuild busts whatever the browser is holding.
@@ -2387,7 +2380,7 @@ tail = '''
 
 BUILD = hashlib.sha1(
     (fingerprint("assets/js/app.js") + fingerprint("assets/css/site.css")
-     + DATA_PATH.read_text(encoding="utf-8")).encode()).hexdigest()[:8]
+     + (SITE / "data" / args.data_file).read_text(encoding="utf-8")).encode()).hexdigest()[:8]
 
 index = (head + body + tail) % {
     "build": BUILD,

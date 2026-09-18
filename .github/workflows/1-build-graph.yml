@@ -1,0 +1,171 @@
+name: 1 · Build the graph and cleanup worksheets
+
+# Step 1 of four. The spreadsheet in; the RDF graph, the column reports, and the
+# two party worksheets out.
+#
+# The worksheets land in data/cleanup/ because they are meant to be edited. A
+# reviewer fills in DECISION in responsible_party.csv, and step 2 applies those
+# rulings when it builds the published data. That is the reason this step exists
+# separately at all: the decisions have to be reviewable before the data that
+# depends on them is generated.
+#
+# Re-running this never destroys a decision. Existing DECISION cells are carried
+# across and the run reports how many, plus any that no longer match a party.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Where to build from"
+        type: choice
+        required: true
+        default: "data/source"
+        options:
+          - data/source     # the CSV committed in this repository
+          - zenodo          # the record's concept DOI, always its latest version
+          - custom          # whatever is put in source_ref below
+      source_ref:
+        description: "Used only when source is 'custom': a path, an http(s) URL, or a Zenodo DOI"
+        required: false
+        default: ""
+      commit:
+        description: "Commit the results back to the branch"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-graph
+  cancel-in-progress: false
+
+jobs:
+  graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check the inputs
+        run: |
+          case "${{ inputs.source }}" in
+            zenodo)      echo "Building from the Zenodo record's concept DOI (latest version)" ;;
+            data/source) echo "Building from the spreadsheet committed in data/source/" ;;
+            custom)
+              if [ -z "${{ inputs.source_ref }}" ]; then
+                echo "::error::source is 'custom' but source_ref is empty."
+                exit 1
+              fi
+              echo "Building from ${{ inputs.source_ref }}" ;;
+          esac
+
+      - name: Spreadsheet to RDF
+        run: |
+          mkdir -p build
+          case "${{ inputs.source }}" in
+            zenodo)      python scripts/restructure_impactful_datasets.py --zenodo -o build ;;
+            data/source) python scripts/restructure_impactful_datasets.py -o build ;;
+            custom)      python scripts/restructure_impactful_datasets.py "${{ inputs.source_ref }}" -o build ;;
+          esac
+
+      - name: Prepare the cleanup worksheets
+        run: |
+          mkdir -p data/cleanup
+          python scripts/prepare_cleanup.py build/impactful_datasets.jsonld \
+            -o data/cleanup | tee cleanup.log
+
+      # The assertions. Both regressions this guards against were silent: a rule
+      # stopped firing, the build succeeded, and a number quietly moved. Recorded
+      # DECISIONs protect the parties someone has ruled on; these checks protect
+      # the mechanism for everyone else.
+      - name: Check the typing invariants
+        run: python scripts/check_party_typing.py data/cleanup/responsible_party.csv
+
+      - name: Summarise
+        run: |
+          python - <<'PY'
+          import csv, collections, json, os, re
+
+          col = json.load(open("build/column_statistics.json"))
+          src = col.get("source", {})
+          where = (f"Zenodo {src.get('version_doi')} — {src.get('file')}"
+                   if src.get("source") == "zenodo"
+                   else src.get("url") or src.get("path") or "unknown")
+          parties = list(csv.DictReader(open("data/cleanup/responsible_party.csv",
+                                             encoding="utf-8-sig")))
+          review = [r for r in parties if r["needs_review"]]
+          decided = sum(1 for r in parties if (r.get("DECISION") or "").strip())
+          kinds = collections.Counter(p["assigned_type"] for p in parties)
+          log = open("cleanup.log").read()
+          orphans = re.search(r"decisions with no matching party any more: (\d+)", log)
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Graph and worksheets rebuilt\n\n")
+              fh.write(f"- source: {where}\n")
+              fh.write(f"- rows read: **{col['rows']}**, encoding repairs: "
+                       f"**{col['encoding_repairs']}**\n")
+              flagged = sum(1 for r in parties if r["needs_review"] == "yes")
+              defaulted = sum(1 for r in parties if r["needs_review"] == "defaulted")
+              fh.write(f"- credited parties: **{len(parties)}**, flagged: "
+                       f"**{flagged}**, defaulted with nothing to go on: "
+                       f"**{defaulted}**\n")
+              fh.write(f"- decisions currently recorded: **{decided}**\n")
+              if orphans and orphans.group(1) != "0":
+                  fh.write(f"- ⚠️ decisions no longer matching a party: "
+                           f"**{orphans.group(1)}** — see the log\n")
+              fh.write("\n### How parties would be typed\n\n| Type | Count |\n|---|---|\n")
+              for k in ("Person", "Organization", "agu:ResponsibleParty"):
+                  fh.write(f"| {k} | {kinds[k]} |\n")
+              fh.write("\nEdit `DECISION` in `data/cleanup/responsible_party.csv` to "
+                       "override any of these, then run **2 · Build the JSON-LD**.\n")
+          PY
+
+      - name: Publish outputs
+        run: |
+          mkdir -p reports data/output
+          cp build/impactful_datasets.jsonld data/output/
+          cp build/column_report.md build/column_statistics.json reports/
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: graph-and-worksheets
+          path: |
+            data/output/impactful_datasets.jsonld
+            data/cleanup/
+            reports/
+
+      - name: List what changed
+        run: |
+          git add data/output/ data/cleanup/ reports/
+          git diff --staged --name-status > /tmp/changed.txt || true
+          if [ ! -s /tmp/changed.txt ]; then
+            echo "CHANGED=0" >> $GITHUB_ENV
+            echo "Nothing changed." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          echo "CHANGED=$(wc -l < /tmp/changed.txt)" >> $GITHUB_ENV
+          {
+            echo ""
+            echo "### Files updated"
+            echo ""
+            echo "| | File |"
+            echo "|---|---|"
+            sed 's/^A\t/| added | `/;s/^M\t/| modified | `/;s/^D\t/| deleted | `/;s/$/` |/' /tmp/changed.txt
+          } >> $GITHUB_STEP_SUMMARY
+          cat /tmp/changed.txt
+
+      - name: Commit
+        if: ${{ inputs.commit && env.CHANGED != '0' }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          SRC=$(python -c "import json;s=json.load(open('reports/column_statistics.json'))['source'];print(s.get('version_doi') or s.get('url') or s.get('path') or 'unknown')")
+          git commit -m "Rebuild the graph and cleanup worksheets from $SRC"
+          git push
