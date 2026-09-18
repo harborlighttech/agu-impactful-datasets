@@ -103,13 +103,19 @@ published URL with it.
 
 ### 3 · Build the site
 
-Renders the website into `site/`.
+Renders the website into `site/`, and publishes it to this repository's own
+GitHub Pages so it can be opened in a browser before anyone proposes it to AGU.
+The URL is printed at the end of the run, with links straight to the collection,
+a dataset page and the data file.
 
 | Input | Default | What it does |
 |---|---|---|
 | `base_url` | `https://data.agu.org/impactful-datasets/` | the address the site is served from |
 | `featured` | `Argo` | the dataset shown if someone lands on the detail page cold |
 | `commit` | on | commit `site/` back to the branch |
+| `deploy_preview` | on | publish to this repository's Pages |
+
+Needs one-time setup: **Settings → Pages → Source → "GitHub Actions"**.
 
 The site is built from `data/output/impactful_datasets.data.jsonld`, not from the
 RDF graph. The page fetches that same file in the browser, so building the markup
@@ -118,6 +124,14 @@ way is byte-identical; this removes the possibility of them drifting.
 
 This step mints nothing, so it has no identifier guard. It checks instead that
 the data file shipped into `site/data/` is exactly the one step 2 published.
+
+**The preview is not the live site.** It is a second public copy of the
+collection at a github.io address, while the data inside it names data.agu.org as
+its home — so left alone, a search engine would index both with nothing to say
+which is authoritative. The deployed copy therefore carries a `robots.txt` asking
+crawlers to stay out. That file is written into the deployment only, never into
+`site/`, because the real site should be indexed. Everything else in the preview
+is byte-identical to what step 4 proposes, which is the point of previewing it.
 
 ### 4 · Open a pull request on agu-data.github.io
 

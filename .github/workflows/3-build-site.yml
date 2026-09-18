@@ -1,13 +1,24 @@
 name: 3 · Build the site
 
-# Step 3 of four. The data in, the website out, into site/.
+# Step 3 of four. The data in, the website out, into site/ -- and onto this
+# repository's own GitHub Pages so it can be opened and tested before anyone
+# proposes it to AGU. The URL is printed at the end of the run.
 #
 # The site is rendered from data/output/impactful_datasets.data.jsonld, the file
 # step 2 produced. Not from the RDF graph: the page fetches that same JSON-LD at
 # runtime, so building the markup from it means the two cannot describe different
 # collections. Verified -- a site built either way is byte-identical.
 #
-# Nothing is deployed here. Step 4 proposes the result to data.agu.org.
+# This Pages deployment is a preview, not the live site. The live site is a
+# directory inside AGU's repository and gets there through step 4.
+#
+# The preview is a second public copy of the collection at a github.io address,
+# while the data inside it names data.agu.org as its home. Left alone, a search
+# engine indexes both and nothing says which is authoritative. So the deployed
+# copy carries a robots.txt asking crawlers to stay out. It is written into the
+# deployment only, never into site/, because the real site should be indexed.
+#
+# One-time setup: Settings -> Pages -> Source -> "GitHub Actions".
 on:
   workflow_dispatch:
     inputs:
@@ -23,9 +34,15 @@ on:
         description: "Commit site/ back to the branch"
         type: boolean
         default: true
+      deploy_preview:
+        description: "Publish to this repository's Pages so it can be opened in a browser"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: build-site
@@ -119,3 +136,63 @@ jobs:
           git diff --staged --quiet && echo "site unchanged" && exit 0
           git commit -m "Rebuild the site"
           git push
+
+      # Packaged separately from site/ so the preview-only robots.txt never ends
+      # up committed. The deployed bytes are otherwise identical to what step 4
+      # proposes, which is the point of previewing them.
+      - name: Package the preview
+        if: ${{ inputs.deploy_preview }}
+        run: |
+          rm -rf preview && mkdir -p preview
+          cp -r site/. preview/
+          printf 'User-agent: *\nDisallow: /\n' > preview/robots.txt
+          # Pages runs Jekyll unless told otherwise, and these are plain static
+          # files that need no processing.
+          touch preview/.nojekyll
+          echo "Packaged $(find preview -type f | wc -l) files"
+
+      - uses: actions/configure-pages@v6
+        if: ${{ inputs.deploy_preview }}
+
+      - uses: actions/upload-pages-artifact@v5
+        if: ${{ inputs.deploy_preview }}
+        with:
+          path: preview
+
+  # A separate job because deploy-pages reports the URL as a job output, which is
+  # what makes it printable and clickable at the end of the run.
+  preview:
+    needs: site
+    if: ${{ inputs.deploy_preview }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+      - name: Print where to test it
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          {
+            echo "## Preview is live"
+            echo ""
+            echo "### [$URL]($URL)"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| the collection | [$URL]($URL) |"
+            echo "| a dataset page | [${URL}#/dataset/agu-0004](${URL}#/dataset/agu-0004) |"
+            echo "| the data file | [${URL}data/impactful_datasets.data.jsonld](${URL}data/impactful_datasets.data.jsonld) |"
+            echo ""
+            echo "This is a preview on this repository's Pages, not the live site."
+            echo "It carries a \`robots.txt\` asking crawlers to stay out, so it"
+            echo "cannot compete with data.agu.org in search results. The canonical"
+            echo "URLs inside the data still point at data.agu.org, which is correct:"
+            echo "these are the exact bytes step 4 proposes."
+            echo ""
+            echo "Happy with it? Run **4 · Open a pull request on agu-data.github.io**."
+          } >> $GITHUB_STEP_SUMMARY
+          echo "Preview: $URL"
+          echo "::notice title=Preview ready::$URL"
