@@ -1,12 +1,22 @@
 # What would change if this went live
 
-Comparing this build against `/tmp/published.jsonld`.
+Comparing this build against `https://data.agu.org/impactful-datasets/data/impactful_datasets.data.jsonld`.
 
-| | Resources |
-|---|---|
-| Added | **0** |
-| Removed | **0** |
-| Changed | **0** |
-| Unchanged | 1227 |
+## By type
+
+| @type | Added | Removed | Changed | Unchanged |
+|---|---|---|---|---|
+| `agu:ResponsibleParty` | — | — | — | 308 |
+| `Organization` | — | — | — | 186 |
+| `EndorseAction` | — | — | — | 174 |
+| `Person` | — | — | — | 168 |
+| `Dataset` | — | — | — | 133 |
+| `ItemList` | — | — | — | 133 |
+| `DataCatalog` | — | — | — | 110 |
+| `DefinedTerm` | — | — | — | 9 |
+| `rdf:Property` | — | — | — | 2 |
+| `DefinedTermSet` | — | — | — | 1 |
+| `owl:Class` | — | — | — | 1 |
+| **total** | **0** | **0** | **0** | 1225 |
 
 The published file and this build describe the same data. Deploying would change nothing.

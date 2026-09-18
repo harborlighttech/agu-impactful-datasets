@@ -41,6 +41,13 @@ def flatten(doc):
     endorsements. Comparing only the top level would miss a changed nominator
     entirely, so this walks the whole structure.
     """
+    # The @context describes the vocabulary, not the collection. Walking it
+    # picks up term definitions such as {"@id": "…/dataset", "@container":
+    # "@list"} and reports them as untyped resources, which is noise: a change
+    # there is a change to the encoding, not to the data.
+    if isinstance(doc, dict):
+        doc = {k: v for k, v in doc.items() if k != "@context"}
+
     out = {}
 
     def walk(node):
@@ -128,80 +135,104 @@ def main():
 
     added = [i for i in new if i not in old]
     removed = [i for i in old if i not in new]
-    changed, same = [], 0
+    changed, unchanged = [], []
     for i in set(new) & set(old):
         a, b = canon(old[i]), canon(new[i])
         if a == b:
-            same += 1
+            unchanged.append(i)
             continue
         props = sorted(set(a) ^ set(b)) + sorted(
             k for k in set(a) & set(b) if a[k] != b[k])
         changed.append((i, sorted(set(props))))
+    changed_ids = [i for i, _ in changed]
+    props_of = {i: p for i, p in changed}
 
-    out, w = [], None
-    out.append("# What would change if this went live\n")
+    def kind_of(i):
+        return kind(new.get(i) or old.get(i) or {})
+
+    out = []
+    w = out.append
+    w("# What would change if this went live\n")
     if unpublished:
-        out.append(f"Nothing is published at `{args.published}` yet "
-                   f"({unpublished}), so every resource below is new. This is the "
-                   "expected result for a first deploy.\n")
+        w(f"Nothing is published at `{args.published}` yet ({unpublished}), so "
+          "every resource below is new. This is the expected result for a first "
+          "deploy.\n")
     else:
-        out.append(f"Comparing this build against `{args.published}`.\n")
+        w(f"Comparing this build against `{args.published}`.\n")
 
-    out.append("| | Resources |")
-    out.append("|---|---|")
-    out.append(f"| Added | **{len(added)}** |")
-    out.append(f"| Removed | **{len(removed)}** |")
-    out.append(f"| Changed | **{len(changed)}** |")
-    out.append(f"| Unchanged | {same} |")
-    out.append("")
+    # Broken out by @type, because "12 resources changed" says nothing about
+    # whether the collection gained a dataset or a nominator changed their
+    # affiliation. The type is what tells you which.
+    buckets = {"added": collections.Counter(kind_of(i) for i in added),
+               "removed": collections.Counter(kind_of(i) for i in removed),
+               "changed": collections.Counter(kind_of(i) for i in changed_ids),
+               "unchanged": collections.Counter(kind_of(i) for i in unchanged)}
+    types = sorted(set().union(*(b.keys() for b in buckets.values())),
+                   key=lambda k: (-(buckets["added"][k] + buckets["removed"][k]
+                                    + buckets["changed"][k]),
+                                  -buckets["unchanged"][k], k))
+
+    w("## By type\n")
+    w("| @type | Added | Removed | Changed | Unchanged |")
+    w("|---|---|---|---|---|")
+    for k in types:
+        a, r, c, u = (buckets["added"][k], buckets["removed"][k],
+                      buckets["changed"][k], buckets["unchanged"][k])
+        # Zeros as a dash: a row of noughts is harder to read past than a row
+        # that says nothing happened here.
+        cell = lambda n, bold=False: ("—" if not n else
+                                      (f"**{n}**" if bold else str(n)))
+        w(f"| `{k}` | {cell(a, True)} | {cell(r, True)} | {cell(c, True)} | {cell(u)} |")
+    w(f"| **total** | **{len(added)}** | **{len(removed)}** | "
+      f"**{len(changed)}** | {len(unchanged)} |")
+    w("")
 
     if not (added or removed or changed):
-        out.append("The published file and this build describe the same data. "
-                   "Deploying would change nothing.\n")
+        w("The published file and this build describe the same data. Deploying "
+          "would change nothing.\n")
 
     def section(title, ids, note=None, detail=None):
         if not ids:
             return
-        by = collections.Counter(kind(new.get(i) or old.get(i) or {}) for i in ids)
-        out.append(f"## {title} ({len(ids)})\n")
+        w(f"## {title} ({len(ids)})\n")
         if note:
-            out.append(note + "\n")
-        out.append("| Type | Count |")
-        out.append("|---|---|")
-        for t, n in by.most_common():
-            out.append(f"| {t} | {n} |")
-        out.append("")
-        shown = sorted(ids, key=lambda i: label(new.get(i) or old.get(i) or {}).lower())
-        for i in shown[:args.max_listed]:
-            node = new.get(i) or old.get(i) or {}
-            extra = detail(i) if detail else ""
-            out.append(f"- **{label(node)}** — `{kind(node)}`{extra}")
-        if len(shown) > args.max_listed:
-            out.append(f"- …and {len(shown) - args.max_listed} more")
-        out.append("")
+            w(note + "\n")
+        # Grouped by type here too, so the list reads the same way as the table
+        # above rather than mixing datasets in among their nominators.
+        by_type = collections.defaultdict(list)
+        for i in ids:
+            by_type[kind_of(i)].append(i)
+        for k in sorted(by_type, key=lambda k: (-len(by_type[k]), k)):
+            rows = sorted(by_type[k],
+                          key=lambda i: label(new.get(i) or old.get(i) or {}).lower())
+            w(f"**`{k}`** — {len(rows)}\n")
+            for i in rows[:args.max_listed]:
+                node = new.get(i) or old.get(i) or {}
+                w(f"- {label(node)}{detail(i) if detail else ''}")
+            if len(rows) > args.max_listed:
+                w(f"- …and {len(rows) - args.max_listed} more")
+            w("")
 
-    section("Resources added", added,
+    section("Added", added,
             "Present in this build and not in the published file.")
-    section("Resources removed", removed,
+    section("Removed", removed,
             "In the published file and gone from this build. A removal is worth "
             "a second look: a dataset that disappears takes its published URL "
             "with it.")
-
-    changed_ids = [i for i, _ in changed]
-    props = {i: p for i, p in changed}
-    section("Resources changed", changed_ids,
+    section("Changed", changed_ids,
             "Same @id, different content.",
-            detail=lambda i: "  \n  changed: " + ", ".join(f"`{p}`" for p in props[i][:6])
-            + (" …" if len(props[i]) > 6 else ""))
+            detail=lambda i: "  \n  changed: "
+            + ", ".join(f"`{p}`" for p in props_of[i][:6])
+            + (" …" if len(props_of[i]) > 6 else ""))
 
     if changed:
         hot = collections.Counter(p for _, ps in changed for p in ps)
-        out.append("## Which properties moved\n")
-        out.append("| Property | Resources affected |")
-        out.append("|---|---|")
-        for p, n in hot.most_common(15):
-            out.append(f"| `{p}` | {n} |")
-        out.append("")
+        w("## Which properties moved\n")
+        w("| Property | Resources affected |")
+        w("|---|---|")
+        for p_, n in hot.most_common(15):
+            w(f"| `{p_}` | {n} |")
+        w("")
 
     report = "\n".join(out)
     args.out.write_text(report, encoding="utf-8")

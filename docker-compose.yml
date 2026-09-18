@@ -1,0 +1,179 @@
+# One service per script, in the order the pipeline runs them.
+#
+#   docker compose run --rm graph        one step
+#   docker compose --profile pipeline up  steps 1 to 3, in order, stopping on failure
+#
+# Every service shares one image and bind-mounts the repository at /repo, so
+# outputs land on the host exactly where the GitHub Actions workflows put them
+# and the next service reads them from there. Nothing is baked into the image.
+#
+# The ordering is not a preference. Each step reads what the one before it
+# wrote, which is why `depends_on` uses service_completed_successfully rather
+# than the default: waiting for a container to *start* would race, since these
+# exit rather than stay up.
+#
+# party_typing.py has no service. It is imported by prepare_cleanup and
+# build_website, not run.
+
+x-python: &python
+  build: .
+  image: agu-impactful-datasets:local
+  working_dir: /repo
+  volumes:
+    - .:/repo
+  environment:
+    BASE_URL: ${BASE_URL:-https://data.agu.org/impactful-datasets/}
+    FEATURED: ${FEATURED:-Argo}
+    PUBLISHED: ${PUBLISHED:-https://data.agu.org/impactful-datasets/data/impactful_datasets.data.jsonld}
+
+services:
+
+  # ---------------------------------------------------------------- step 1 ---
+  # Spreadsheet to RDF. SOURCE takes a path, an https:// URL or a Zenodo DOI;
+  # left empty it uses the single CSV in data/source/.
+  graph:
+    <<: *python
+    profiles: ["pipeline", "step1"]
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p build data/output reports
+        python scripts/restructure_impactful_datasets.py ${SOURCE:-} -o build
+        cp build/impactful_datasets.jsonld data/output/
+        cp build/column_report.md build/column_statistics.json reports/
+
+  # The party worksheet. Decisions already in it are carried across, so running
+  # this again after new nominations does not discard a reviewer's work.
+  cleanup:
+    <<: *python
+    profiles: ["pipeline", "step1"]
+    depends_on:
+      graph:
+        condition: service_completed_successfully
+    command:
+      - python
+      - scripts/prepare_cleanup.py
+      - data/output/impactful_datasets.jsonld
+      - -o
+      - data/cleanup
+
+  # Fails the run if a typing rule has stopped doing what it claims. Cheap, and
+  # the failure it catches is otherwise silent.
+  check:
+    <<: *python
+    profiles: ["pipeline", "step1"]
+    depends_on:
+      cleanup:
+        condition: service_completed_successfully
+    command: python scripts/check_party_typing.py data/cleanup/responsible_party.csv
+
+  # ---------------------------------------------------------------- step 2 ---
+  # The published data. data/output/impactful_datasets.data.jsonld is seeded
+  # into build/data first because it is the identifier registry: without it
+  # every dataset is renumbered and every published URL breaks, silently.
+  data:
+    <<: *python
+    profiles: ["pipeline", "step2"]
+    depends_on:
+      check:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p build/data
+        if [ -f data/output/impactful_datasets.data.jsonld ]; then
+          cp data/output/impactful_datasets.data.jsonld build/data/
+        else
+          echo "warning: no registry at data/output/impactful_datasets.data.jsonld;"
+          echo "         every identifier will be minted fresh, correct only on a first run"
+        fi
+        python scripts/build_website.py data/output/impactful_datasets.jsonld \
+          --logo assets/AGU_Logo_H_CMYK.png \
+          --base-url "$$BASE_URL" \
+          --data-only -o build
+        cp build/data/impactful_datasets.data.jsonld data/output/
+
+  # Counts measured from the published file, so they describe what was
+  # published rather than what the pipeline intended.
+  stats:
+    <<: *python
+    profiles: ["pipeline", "step2"]
+    depends_on:
+      data:
+        condition: service_completed_successfully
+    command:
+      - python
+      - scripts/analyze_graph.py
+      - data/output/impactful_datasets.data.jsonld
+      - -o
+      - reports
+
+  model:
+    <<: *python
+    profiles: ["pipeline", "step2"]
+    depends_on:
+      data:
+        condition: service_completed_successfully
+    command:
+      - python
+      - scripts/document_schema_model.py
+      - data/output/impactful_datasets.data.jsonld
+      - -o
+      - reports/schema_model.svg
+
+  # What a deploy would change, matched on @id. Set PUBLISHED to a local path to
+  # diff two builds instead, or to "" to skip.
+  compare:
+    <<: *python
+    profiles: ["pipeline", "step2"]
+    depends_on:
+      data:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        python scripts/compare_to_published.py \
+          data/output/impactful_datasets.data.jsonld \
+          --published "$$PUBLISHED" \
+          -o reports/changes_vs_published.md
+
+  # ---------------------------------------------------------------- step 3 ---
+  # The site, rendered from the published JSON-LD rather than the RDF graph. The
+  # page fetches that same file in the browser, so building the markup from it
+  # means the two cannot describe different collections.
+  site:
+    <<: *python
+    profiles: ["pipeline", "step3"]
+    depends_on:
+      data:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        python scripts/build_website.py \
+          --from-data data/output/impactful_datasets.data.jsonld \
+          --logo assets/AGU_Logo_H_CMYK.png \
+          --feature-image assets/story-feature-source.jpg \
+          --featured "$$FEATURED" \
+          --base-url "$$BASE_URL" \
+          -o build
+        rm -rf site && mkdir -p site
+        cp -r build/index.html build/assets build/data site/
+        echo "site/ rebuilt: $$(find site -type f | wc -l) files"
+
+  # ------------------------------------------------------------------ extra --
+  # Not part of the pipeline: serves site/ so the result can be opened. The page
+  # fetches its data over HTTP, so opening index.html from disk shows an empty
+  # shelf -- this is the difference between "built" and "working".
+  serve:
+    <<: *python
+    profiles: ["serve"]
+    command: python -m http.server 8000 --directory site
+    ports:
+      - "${PORT:-8000}:8000"
