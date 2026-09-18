@@ -1,45 +1,63 @@
 # GitHub Actions workflows
 
-Run them from the **Actions** tab → pick the workflow → **Run workflow**. 
+Three manually-triggered workflows. Run them from the **Actions** tab → pick the
+workflow → **Run workflow**. Nothing runs on push.
 
 | Workflow | Does | Run it when |
 |---|---|---|
 | **1 · Build data and statistics** | spreadsheet → schema.org JSON-LD → statistics, diagrams and site | the spreadsheet changed, or the pipeline did |
-| **2 · Explain how the data was read** | writes and prints a plain-language account of how the spreadsheet was interpreted | before trusting a build, or before showing it to anyone |
+| **2 · Analyse the data** | how the spreadsheet was interpreted, and what a deploy would change in the live data | before trusting a build, and before proposing one |
 | **3 · Preview on this repo's Pages** | publishes `site/` to *this* repository's Pages | you want to see a build on a real URL |
 | **4 · Open a pull request on agu-data.github.io** | proposes `site/` as `impactful-datasets/` via a fork | the build is ready to go live |
 
-## Reading workflow 2 before you trust a build
- 
-Everything upstream of the site involves inference: which delimiter separates the
-names in a cell, whether a credited party is a person or an institution. The
-guesses are right often enough that nobody notices the wrong ones unless pointed
-at them. Workflow 2 does the pointing, and prints the whole report to the run log
-so it can be read without downloading anything.
- 
-It writes two files to `reports/`:
- 
-- `interpretation.md` — which columns needed a judgement call, which are sparse,
-  which cells held the most values, and how confidently each credited party was
-  typed
-- `person_review.csv` — the underlying row-by-row reasoning
-`person_review.csv` **at the repository root is a different file**. That one
-carries the reviewer's `DECISION` column and is an input to the build. Workflow 2
-never writes it, so running the workflow cannot erase a decision.
+Workflow 1 used to be two, one for the RDF graph and one for the statistics.
+They were merged because the statistics are measured from the published
+schema.org file, so they could never run without first producing it. Keeping them
+apart only created a way for the reports to describe a file that no longer
+existed.
+
+## Workflow 2, before you trust a build
+
+It answers two questions and prints both to the run log, so neither needs a
+download.
+
+**How was the spreadsheet interpreted?** Everything upstream of the site involves
+inference: which delimiter separates the names in a cell, whether a credited
+party is a person or an institution. The guesses are right often enough that
+nobody notices the wrong ones unless pointed at them.
+`reports/interpretation.md` does the pointing.
+
+**What would change if this went live?** `reports/changes_vs_published.md`
+compares the build against the file currently served at data.agu.org, matching
+resources on `@id`. It reports meaning rather than text, so reformatting produces
+no diff while a renamed dataset or a dropped nomination does. Removals deserve
+the closest look: a dataset that disappears takes its published URL with it.
+
+If nothing is published yet, the comparison still succeeds and reports everything
+as new, which is the right answer for a first deploy rather than an error.
+
+`person_review.csv` **in `data/cleanup/` is a different file**. That one carries
+the reviewer's `DECISION` column and is an input to the build. Workflow 2 writes
+only to `reports/`, so running it cannot erase a decision.
 
 ## What workflow 1 does, in order
 
 ```
-restructure_impactful_datasets.py   spreadsheet  -> RDF working graph
-build_website.py                    working graph -> schema.org JSON-LD + site
-analyze_graph.py                    schema.org    -> statistics + model diagram
-document_schema_model.py            schema.org    -> full model diagram
+scripts/restructure_impactful_datasets.py   spreadsheet   -> RDF working graph
+scripts/build_website.py                    working graph -> schema.org JSON-LD + site
+scripts/analyze_graph.py                    schema.org    -> statistics + model diagram
+scripts/document_schema_model.py            schema.org    -> full model diagram
 ```
 
-Each step reads the previous one's output. The statistics describe what was 
-actually published.
+Each step reads the previous one's output, so the order is not a preference.
+The statistics come last on purpose: they describe what was actually published
+rather than what the pipeline intended.
 
-## Dataset Identifiers
+Every run writes a summary to the Actions page with the dataset, nominator,
+nomination and discipline-group counts, a table of datasets per discipline
+group, and every class in the file with its instance count.
+
+## The identifier guard
 
 `site/data/impactful_datasets.data.jsonld` is the published data **and** the
 identifier registry. Workflow 1 seeds it into the build directory first, then

@@ -197,24 +197,32 @@ It also refuses to finish if identifiers were reissued without `allow_new_ids`.
 That guard exists because a rebuild that renumbers datasets breaks every
 published URL, silently.
 
-### 2 · Explain how the data was read
+### 2 · Analyse the data
 
-Writes `reports/interpretation.md` and `data/cleanup/person_review.csv`, and prints the
-whole report to the run log so it can be read without downloading anything.
+Two reports, both printed to the run log:
 
-Run it between building and previewing. Everything upstream of the site involves
-inference — which delimiter separates the names in a cell, whether a credited
-party is a person or an institution — and the guesses are right often enough that
-nobody notices the wrong ones unless pointed at them.
+**`reports/interpretation.md`** — how the spreadsheet was read. Which columns
+needed a judgement call (the comma-split ones, where `Jochum, Klaus Peter` is one
+person and `A. Newman, M. Clark` is two), which columns are sparse, which cells
+held the most values, and how confidently each credited party was typed.
 
-The report covers which columns needed a judgement call (the ones split on a
-comma, where `Jochum, Klaus Peter` is one person and `A. Newman, M. Clark` is
-two), which columns are sparse, which cells held the most values, and how
-confidently each of the 518 credited parties was typed.
+**`reports/changes_vs_published.md`** — what a deploy would change. The build is
+compared against the file currently served at data.agu.org, matching resources on
+`@id`, so the report describes meaning rather than text: reformatting produces no
+diff, a renamed dataset or a dropped nomination does. Resources are grouped as
+added, removed and changed, with the changed ones broken down by which property
+moved.
 
-It never writes `person_review.csv` at the repository root. That file carries the
-reviewer's `DECISION` column and is an input to the build, so running this
-workflow cannot erase a decision.
+Removals are called out deliberately. A dataset that disappears from the graph
+takes its published URL with it, and that is the one change worth stopping for.
+The comparison also catches the knock-on kind: deleting a dataset removes the
+curator and repository nothing else referenced.
+
+With nothing published yet the comparison still succeeds and reports everything
+as new, which is correct for a first deploy rather than an error.
+
+It writes only to `reports/`, never to `data/cleanup/person_review.csv`, so
+running it cannot erase a reviewer's decision.
 
 ### 3 · Preview on this repo's Pages
 
@@ -349,9 +357,6 @@ assets/js/app.js                      application script
 assets/img/agu-logo.png               brand mark
 assets/img/story-feature.jpg          photo for the article callout on page 1
 data/impactful_datasets.data.jsonld   the published collection, schema.org JSON-LD
-data/cleanup/party_report.csv         every credited party, its assigned type,
-                                      the rule that decided it, and a DECISION
-                                      column for overriding it
 ```
 
 `data/impactful_datasets.data.jsonld` is **the published data** — a schema.org
@@ -485,7 +490,7 @@ pointers describe the relationship without asserting anything about anybody
 else's data. Verified: a foreign `schema:Person` is untouched after reasoning,
 while `ResponsibleParty` instances still infer as `prov:Agent`.
 
-Nothing is typed `ResponsibleParty` yet. See `person_review.csv` and
+Nothing is typed `ResponsibleParty` yet. See `data/cleanup/person_review.csv` and
 `review_person_types.py`: 191 entities currently typed `Person` are flagged, of
 which 82 look like organisations, 62 hold several entities in one string, and 43
 are parse artifacts rather than entities at all. That review is unresolved.
@@ -505,7 +510,7 @@ Guessing `Person` would be a stronger claim than the data can carry.
 
 Decisions are made in one function, `party()` in `build_website.py`. Each branch
 carries an inline `# RULE Rn` marker, and the `PARTY_RULES` table just above it
-maps each id to its reason and confidence. Every build writes `party_report.csv`,
+maps each id to its reason and confidence. Every build writes `data/cleanup/party_report.csv`,
 one row per distinct name, with the rule that decided it — so any row in the
 report can be traced to the line of code that produced it.
 
@@ -550,8 +555,8 @@ are typed `ResponsibleParty` to keep the graph honest and flagged for repair in
 **R11 is the default, and it is deliberately cautious.** A name with no ORCID and
 no review has nothing behind it but a string. `ResponsibleParty` records that.
 
-**R3 is the escape hatch.** Fill `DECISION` in `person_review.csv` or
-`party_report.csv` with `person`, `organization` or `responsibleparty` and it
+**R3 is the escape hatch.** Fill `DECISION` in `data/cleanup/person_review.csv` or
+`data/cleanup/party_report.csv` with `person`, `organization` or `responsibleparty` and it
 overrides every heuristic at high confidence. No rows use it yet, so nothing in
 the current output is human-ruled.
 

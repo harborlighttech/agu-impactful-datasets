@@ -1,13 +1,18 @@
 name: 1 · Build data and statistics
 
-# One pass over the whole data side: the nomination spreadsheet, the published
+# One pass over the whole data side: the nomination spreadsheet in, the published
 # schema.org file and its statistics out.
+#
+# This replaces what used to be two workflows. Splitting them was a false economy:
+# the statistics are measured from the published file, so they could never be
+# produced without first producing it, and running them apart only created a way
+# for the reports to describe a file that no longer existed.
 #
 # The order is fixed by what each step reads:
 #
-#   1. restructure_impactful_datasets.py   spreadsheet -> RDF working graph
-#   2. build_website.py                    working graph -> schema.org file (+ site)
-#   3. analyze_graph.py                    schema.org file -> statistics, diagram
+#   1. scripts/restructure_impactful_datasets.py   spreadsheet -> RDF working graph
+#   2. scripts/build_website.py                    working graph -> schema.org file (+ site)
+#   3. scripts/analyze_graph.py                    schema.org file -> statistics, diagram
 #
 # Step 2 also writes the site, because the site is built from the same records in
 # the same pass. Workflow 2 previews it; workflow 3 proposes it to AGU.
@@ -71,7 +76,7 @@ jobs:
       - name: Check the inputs
         run: |
           test -f assets/AGU_Logo_H_CMYK.png || echo "::warning::No logo; the header will render empty."
-          test -f data/cleanup/person_review.csv || echo "::warning::No data/cleanup/person_review.csv; parties without an ORCID all default to agu:ResponsibleParty."
+          test -f data/cleanup/person_review.csv || echo "::warning::No data/cleanup/person_review.csv; every reviewer decision is ignored and parties without an ORCID default to agu:ResponsibleParty."
           case "${{ inputs.source }}" in
             zenodo)      echo "Building from the Zenodo record's concept DOI (latest version)" ;;
             data/source) echo "Building from the spreadsheet committed in data/source/" ;;
@@ -162,21 +167,24 @@ jobs:
 
       - name: Publish outputs
         run: |
-          mkdir -p reports
+          mkdir -p reports data/cleanup
           rm -rf site && mkdir -p site
           mkdir -p data/output
           cp build/impactful_datasets.jsonld data/output/
           cp -r build/index.html build/assets build/data site/
           cp build/column_report.md build/column_statistics.json \
              build/graph_statistics.md build/graph_statistics.json \
-             build/conceptual_model.svg build/schema_model.svg \
-             build/party_report.csv reports/
+             build/conceptual_model.svg build/schema_model.svg reports/
+          # party_report.csv sits with the review worksheet it belongs to: both
+          # carry a DECISION column, and data/cleanup/ is where that work happens
+          cp build/party_report.csv data/cleanup/
 
       - uses: actions/upload-artifact@v6
         with:
           name: data-and-statistics
           path: |
             data/output/impactful_datasets.jsonld
+            data/cleanup/party_report.csv
             site/
             reports/
 
@@ -184,7 +192,7 @@ jobs:
       # commit turned off still shows exactly what it would have changed.
       - name: List what changed
         run: |
-          git add data/output/impactful_datasets.jsonld site/ reports/
+          git add data/output/ data/cleanup/ site/ reports/
           git diff --staged --name-status > /tmp/changed.txt || true
           if [ ! -s /tmp/changed.txt ]; then
             echo "CHANGED=0" >> $GITHUB_ENV

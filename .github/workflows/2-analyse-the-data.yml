@@ -1,7 +1,10 @@
-name: 2 · Explain how the data was read
+name: 2 · Analyse the data
 
-# Produces a plain-language account of how the spreadsheet was interpreted, and
-# prints it to the log so it can be read without downloading anything.
+# Two questions a reviewer has before a deploy, answered and printed to the log
+# so neither needs a download:
+#
+#   How was the spreadsheet interpreted?   reports/interpretation.md
+#   What would change if this went live?   reports/changes_vs_published.md
 #
 # Run it between building the data and previewing the site. Everything upstream
 # of the site is guesswork of one kind or another -- which delimiter separates
@@ -14,18 +17,22 @@ name: 2 · Explain how the data was read
 #   interpretation.md   how each column was read, and which were awkward
 #   person_review.csv   every credited party, its assigned type, and why
 #
-# person_review.csv at the repository root is a different file: that one holds
-# the reviewer's DECISION column and is an input to the build. This workflow
-# never writes it, so a decision cannot be erased by running this.
+# data/cleanup/person_review.csv is a different file: that one holds the
+# reviewer's DECISION column and is an input to the build. This workflow writes
+# only to reports/, so running it cannot erase a decision.
 on:
   workflow_dispatch:
     inputs:
       data_file:
-        description: "Published data file to read"
+        description: "The file this build produced"
         required: true
         default: "site/data/impactful_datasets.data.jsonld"
+      compare_with:
+        description: "Live file to compare against; blank skips the comparison"
+        required: false
+        default: "https://data.agu.org/impactful-datasets/data/impactful_datasets.data.jsonld"
       commit:
-        description: "Commit the report to reports/"
+        description: "Commit the reports to reports/"
         type: boolean
         default: true
 
@@ -169,7 +176,7 @@ jobs:
                     "fragment that landed in a name field. Giving these a formal "
                     "type would be worse than leaving them.")
               w("")
-              w("Both are artifacts of the original spreadsheet, and both are "
+              w("Both are artefacts of the original spreadsheet, and both are "
                 "listed in `data/cleanup/person_review.csv`.\n")
 
           report = "\n".join(out)
@@ -183,11 +190,27 @@ jobs:
               fh.write(report)
           PY
 
+      # What a deploy would actually do to the live data. Resources are matched
+      # on @id, so this reports meaning rather than text: reformatting produces
+      # no diff, a renamed dataset or a dropped nomination does. Removals matter
+      # most -- a dataset that disappears takes its published URL with it.
+      - name: Compare against the published data
+        if: ${{ inputs.compare_with != '' }}
+        run: |
+          python scripts/compare_to_published.py "${{ inputs.data_file }}" \
+            --published "${{ inputs.compare_with }}" \
+            -o reports/changes_vs_published.md
+          {
+            echo ""
+            cat reports/changes_vs_published.md
+          } >> $GITHUB_STEP_SUMMARY
+
       - uses: actions/upload-artifact@v6
         with:
-          name: interpretation
+          name: data-analysis
           path: |
             reports/interpretation.md
+            reports/changes_vs_published.md
             data/cleanup/person_review.csv
 
       - name: Commit
@@ -196,6 +219,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add reports/interpretation.md data/cleanup/person_review.csv
-          git diff --staged --quiet && echo "report unchanged" && exit 0
-          git commit -m "Refresh the interpretation report"
+          [ -f reports/changes_vs_published.md ] && git add reports/changes_vs_published.md
+          git diff --staged --quiet && echo "reports unchanged" && exit 0
+          git commit -m "Refresh the data analysis reports"
           git push
