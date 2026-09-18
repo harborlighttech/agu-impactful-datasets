@@ -439,11 +439,18 @@ if not args.from_data:
 
     REVIEW = load_review(args.responsible_party)
     if REVIEW:
-        print("party types: read %d reviewed names from %s" % (len(REVIEW), args.responsible_party))
+        _decided = sum(1 for _r in REVIEW.values() if (_r.get("DECISION") or "").strip())
+        print("party types: %d parties from %s, %d with a recorded decision"
+              % (len(REVIEW), args.responsible_party, _decided))
     else:
-        print("party types: no review file at %s; every reviewer decision is ignored "
-              "and names without an ORCID default to agu:ResponsibleParty"
-              % args.responsible_party)
+        # Not fatal, and that is exactly the danger: the build succeeds and the
+        # data validates. Only the crediting is worse than intended, which no
+        # later step can detect.
+        print("party types: no worksheet at %s. Falling back to the heuristics "
+              "alone -- every recorded decision is ignored, identified "
+              "organisations stay unresolved, and any party without an ORCID "
+              "becomes agu:ResponsibleParty. Run prepare_cleanup.py to recreate "
+              "the worksheet." % args.responsible_party)
 
     party_tally = collections.Counter()
 
