@@ -1,6 +1,6 @@
 # What would change if this went live
 
-Comparing this build against `https://data.agu.org/impactful-datasets/data/impactful_datasets.data.jsonld`.
+Comparing this build against `/tmp/published.jsonld`.
 
 ## By type
 
